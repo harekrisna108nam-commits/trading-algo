@@ -1,0 +1,34 @@
+server:
+  port: 8085
+
+dhan:
+  base-url: https://api.dhan.co
+  access-token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczNDU5ODQ4LCJpYXQiOjE3NzMzNzM0NDgsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTA2Mjg5ODAzIn0.mQwh_ewGyoBckWMmgKtcAF1Vh-ks1MuMEV9sbMSkfV7xNguoex5DY2UywH5oluqNT2OG_VXKbgErttv8-f1r3w
+  client-id: 1106289803
+  api-key: 456cb2f8
+  api-secret: a772ba45-7574-4262-a42f-5da13a1bbf88
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: anupam@2026
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update   # creates tables automatically
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  jackson:
+    serialization:
+      INDENT_OUTPUT: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.type.descriptor.sql.BasicBinder: trace
