@@ -129,10 +129,10 @@ public class FlowSignalService {
 public class FlowSignalService {
 
     // flow pressure threshold (2%)
-    private static final double FLOW_TH = 0.02;
+    private static final double FLOW_TH = 0.0;
 
     // momentum threshold
-    private static final double DELTA_RSI_TH = 0.15;
+    private static final double DELTA_RSI_TH = 0.0;
 
     public FlowSignal evaluate(
             double callFlow,
@@ -147,7 +147,7 @@ public class FlowSignalService {
         if (total == 0)
             return FlowSignal.HOLD;
 
-        double normalizedFlow = net / total;
+        double normalizedFlow = net;
 
         // =====================================================
         // CALL logic
