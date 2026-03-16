@@ -55,7 +55,9 @@ public class DhanSubscriptionStore {
     public void add(
             String exchange,
             String securityId,
-            String optionType
+            String optionType,
+            double strike
+            
     ) {
 
         if (!repo.existsByExchangeAndSecurityId(exchange, securityId)) {
@@ -64,6 +66,7 @@ public class DhanSubscriptionStore {
             s.setExchange(exchange);
             s.setSecurityId(securityId);
             s.setOptionType(optionType);
+            s.setStrike(strike);
 
             repo.save(s);
         }

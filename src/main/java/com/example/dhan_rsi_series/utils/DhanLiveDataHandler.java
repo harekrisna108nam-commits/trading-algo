@@ -1330,10 +1330,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 	// ================= SUBSCRIBE =================
 
-	public Mono<Void> subscribe(String exchange, String securityId, String optionType) {
+	public Mono<Void> subscribe(String exchange, String securityId, String optionType, double strike) {
 
 		// 1️⃣ Persist + cache metadata
-		store.add(exchange, securityId, optionType);
+		store.add(exchange, securityId, optionType, strike);
 
 		// 2️⃣ If WS not connected, DB restore will handle later
 		if (session == null || !session.isOpen()) {

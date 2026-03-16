@@ -49,7 +49,7 @@ public class DhanSubscriptionController {
 
             // 1️⃣ persist
             .doOnNext(securityId ->
-                store.add(req.getExchange(), securityId, req.getOptionType())
+                store.add(req.getExchange(), securityId, req.getOptionType(), 0.0)
             )
 
             // 2️⃣ subscribe socket (async)
@@ -57,7 +57,8 @@ public class DhanSubscriptionController {
                 handler.subscribe(
                     req.getExchange(),
                     securityId,
-                    req.getOptionType()
+                    req.getOptionType(),
+                    0.0
                 )
             )
 
