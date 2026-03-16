@@ -1147,7 +1147,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
                         	        .transactionType("BUY")
                         	        .exchangeSegment("NSE_FNO")
-                        	        .productType("INTRADAY")
+                        	        .productType("MARGIN")
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(callSave.getSecurityId()))
@@ -1156,7 +1156,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .price(0)
                         	        .triggerPrice(0)
                         	        .afterMarketOrder(false)
-                        	        .amoTime("")
                         	        .build();
                         	
                             callSave.setBuy(true);
@@ -1180,7 +1179,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
                         	        .transactionType("SELL")
                         	        .exchangeSegment("NSE_FNO")
-                        	        .productType("INTRADAY")
+                        	        .productType("MARGIN")
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(callSave.getSecurityId()))
@@ -1189,7 +1188,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .price(0)
                         	        .triggerPrice(0)
                         	        .afterMarketOrder(false)
-                        	        .amoTime("")
                         	        .build();
                         	
                         	 // 🔍 PRINT REQUEST BODY
@@ -1220,7 +1218,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
                         	        .transactionType("BUY")
                         	        .exchangeSegment("NSE_FNO")
-                        	        .productType("INTRADAY")
+                        	        .productType("MARGIN")
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(putSave.getSecurityId()))
@@ -1229,7 +1227,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .price(0)
                         	        .triggerPrice(0)
                         	        .afterMarketOrder(false)
-                        	        .amoTime("")
                         	        .build();
                             putSave.setBuy(true);
                             
@@ -1251,7 +1248,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
                         	        .transactionType("SELL")
                         	        .exchangeSegment("NSE_FNO")
-                        	        .productType("INTRADAY")
+                        	        .productType("MARGIN")
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(putSave.getSecurityId()))
@@ -1260,7 +1257,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .price(0)
                         	        .triggerPrice(0)
                         	        .afterMarketOrder(false)
-                        	        .amoTime("")
                         	        .build();
                         	
                         	 // 🔍 PRINT REQUEST BODY
