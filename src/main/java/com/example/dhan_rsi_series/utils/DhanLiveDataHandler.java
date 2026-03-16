@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -15,9 +16,11 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.enums.FlowSignal;
+import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.service.CandleRsiService;
+import com.example.dhan_rsi_series.service.DhanOrderService;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -714,13 +717,17 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	private OptionRsiRepository repository;
 	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
 
+	@Value("${dhan.client-id}")
+    private String clientId;
+	private final DhanOrderService dhanOrderService;
 	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
-			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository repository) {
+			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository repository, DhanOrderService dhanOrderService) {
 		this.rsiService = rsiService;
 		this.store = store;
 		this.signalService = signalService;
 		this.aggregator = aggregator;
 		this.repository = repository;
+		this.dhanOrderService = dhanOrderService;
 	}
 
 //    @Override
@@ -932,8 +939,8 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 		this.session = session;
 
-		int callId = 57806;
-		int putId = 57748;
+		int callId = 57774;
+		int putId = 57666;
 
 		Mono<Void> resubscribe = sendAllSubscriptions();
 
@@ -1129,13 +1136,50 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                     switch (callSignal) {
 
                         case BUY_CALL -> {
+                        	
+                        	DhanOrderRequest request = DhanOrderRequest.builder()
+                        	        .dhanClientId(clientId)
+                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
+                        	        .transactionType("BUY")
+                        	        .exchangeSegment("NSE_FNO")
+                        	        .productType("INTRADAY")
+                        	        .orderType("MARKET")
+                        	        .validity("DAY")
+                        	        .securityId(String.valueOf(callSave.getSecurityId()))
+                        	        .quantity(1)
+                        	        .disclosedQuantity(0)
+                        	        .price(0)
+                        	        .triggerPrice(0)
+                        	        .afterMarketOrder(false)
+                        	        .amoTime("")
+                        	        .build();
+                        	
                             callSave.setBuy(true);
-                            placeCallOrder();
+                            
+                            
+                            placeCallOrder(request);
                         }
 
                         case SELL_CALL -> {
+                        	DhanOrderRequest request = DhanOrderRequest.builder()
+                        	        .dhanClientId(clientId)
+                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
+                        	        .transactionType("SELL")
+                        	        .exchangeSegment("NSE_FNO")
+                        	        .productType("INTRADAY")
+                        	        .orderType("MARKET")
+                        	        .validity("DAY")
+                        	        .securityId(String.valueOf(callSave.getSecurityId()))
+                        	        .quantity(1)
+                        	        .disclosedQuantity(0)
+                        	        .price(0)
+                        	        .triggerPrice(0)
+                        	        .afterMarketOrder(false)
+                        	        .amoTime("")
+                        	        .build();
+                        	
                             callSave.setSell(true);
-                            exitCall();
+                            exitCall(request);
                         }
 
                         default -> {}
@@ -1147,13 +1191,46 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                     switch (putSignal) {
 
                         case BUY_PUT -> {
+                        	DhanOrderRequest request = DhanOrderRequest.builder()
+                        	        .dhanClientId(clientId)
+                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
+                        	        .transactionType("BUY")
+                        	        .exchangeSegment("NSE_FNO")
+                        	        .productType("INTRADAY")
+                        	        .orderType("MARKET")
+                        	        .validity("DAY")
+                        	        .securityId(String.valueOf(putSave.getSecurityId()))
+                        	        .quantity(1)
+                        	        .disclosedQuantity(0)
+                        	        .price(0)
+                        	        .triggerPrice(0)
+                        	        .afterMarketOrder(false)
+                        	        .amoTime("")
+                        	        .build();
                             putSave.setBuy(true);
-                            placePutOrder();
+                            placePutOrder(request);
                         }
 
                         case SELL_PUT -> {
+                        	DhanOrderRequest request = DhanOrderRequest.builder()
+                        	        .dhanClientId(clientId)
+                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
+                        	        .transactionType("SELL")
+                        	        .exchangeSegment("NSE_FNO")
+                        	        .productType("INTRADAY")
+                        	        .orderType("MARKET")
+                        	        .validity("DAY")
+                        	        .securityId(String.valueOf(putSave.getSecurityId()))
+                        	        .quantity(1)
+                        	        .disclosedQuantity(0)
+                        	        .price(0)
+                        	        .triggerPrice(0)
+                        	        .afterMarketOrder(false)
+                        	        .amoTime("")
+                        	        .build();
+                        	
                             putSave.setSell(true);
-                            exitPut();
+                            exitPut(request);
                         }
 
                         default -> {}
@@ -1201,21 +1278,25 @@ public class DhanLiveDataHandler implements WebSocketHandler {
             .doFinally(s -> this.session = null);
 }
 
-	private void placeCallOrder() {
+	private void placeCallOrder(DhanOrderRequest request) {
 		System.out.println("🟢 BUY CALL");
+		dhanOrderService.placeOrder(clientId, request);
 		// call broker API here
 	}
 
-	private void placePutOrder() {
+	private void placePutOrder(DhanOrderRequest request) {
 		System.out.println("🔴 BUY PUT");
+		dhanOrderService.placeOrder(clientId, request);
 	}
 
-	private void exitCall() {
+	private void exitCall(DhanOrderRequest request) {
 		System.out.println("⚪ EXIT CALL");
+		dhanOrderService.placeOrder(clientId, request);
 	}
 
-	private void exitPut() {
+	private void exitPut(DhanOrderRequest request) {
 		System.out.println("⚪ EXIT PUT");
+		dhanOrderService.placeOrder(clientId, request);
 	}
 
 //    @Component
