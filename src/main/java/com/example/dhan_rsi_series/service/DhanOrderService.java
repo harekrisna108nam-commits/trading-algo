@@ -23,6 +23,14 @@ public class DhanOrderService {
                 .header("access-token", accessToken)
                 .bodyValue(request)
                 .retrieve()
+                .onStatus(
+                        status -> status.isError(),
+                        response -> response.bodyToMono(String.class)
+                                .flatMap(errorBody -> {
+                                    System.out.println("❌ DHAN API ERROR BODY: " + errorBody);
+                                    return Mono.error(new RuntimeException(errorBody));
+                                })
+                )
                 .bodyToMono(DhanOrderResponse.class);
     }
 }

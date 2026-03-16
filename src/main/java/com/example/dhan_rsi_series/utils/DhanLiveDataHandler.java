@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.databind.ObjectMapper;
 
 /*@Component
 public class DhanLiveDataHandler implements WebSocketHandler {
@@ -719,6 +720,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 	@Value("${dhan.client-id}")
     private String clientId;
+	
+	@Value("${dhan.access-token}")
+    private String accessToken;
+	
 	private final DhanOrderService dhanOrderService;
 	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
 			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository repository, DhanOrderService dhanOrderService) {
@@ -1146,7 +1151,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(callSave.getSecurityId()))
-                        	        .quantity(1)
+                        	        .quantity(65)
                         	        .disclosedQuantity(0)
                         	        .price(0)
                         	        .triggerPrice(0)
@@ -1156,6 +1161,15 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	
                             callSave.setBuy(true);
                             
+                            // 🔍 PRINT REQUEST BODY
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                String json = mapper.writeValueAsString(request);
+                                System.out.println("DHAN ORDER REQUEST => " + json);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+
                             
                             placeCallOrder(request);
                         }
@@ -1170,13 +1184,23 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(callSave.getSecurityId()))
-                        	        .quantity(1)
+                        	        .quantity(65)
                         	        .disclosedQuantity(0)
                         	        .price(0)
                         	        .triggerPrice(0)
                         	        .afterMarketOrder(false)
                         	        .amoTime("")
                         	        .build();
+                        	
+                        	 // 🔍 PRINT REQUEST BODY
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                String json = mapper.writeValueAsString(request);
+                                System.out.println("DHAN ORDER REQUEST => " + json);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+
                         	
                             callSave.setSell(true);
                             exitCall(request);
@@ -1200,7 +1224,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(putSave.getSecurityId()))
-                        	        .quantity(1)
+                        	        .quantity(65)
                         	        .disclosedQuantity(0)
                         	        .price(0)
                         	        .triggerPrice(0)
@@ -1208,6 +1232,16 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .amoTime("")
                         	        .build();
                             putSave.setBuy(true);
+                            
+                            // 🔍 PRINT REQUEST BODY
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                String json = mapper.writeValueAsString(request);
+                                System.out.println("DHAN ORDER REQUEST => " + json);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+
                             placePutOrder(request);
                         }
 
@@ -1221,13 +1255,23 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                         	        .orderType("MARKET")
                         	        .validity("DAY")
                         	        .securityId(String.valueOf(putSave.getSecurityId()))
-                        	        .quantity(1)
+                        	        .quantity(65)
                         	        .disclosedQuantity(0)
                         	        .price(0)
                         	        .triggerPrice(0)
                         	        .afterMarketOrder(false)
                         	        .amoTime("")
                         	        .build();
+                        	
+                        	 // 🔍 PRINT REQUEST BODY
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                String json = mapper.writeValueAsString(request);
+                                System.out.println("DHAN ORDER REQUEST => " + json);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+
                         	
                             putSave.setSell(true);
                             exitPut(request);
@@ -1279,24 +1323,51 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 }
 
 	private void placeCallOrder(DhanOrderRequest request) {
-		System.out.println("🟢 BUY CALL");
-		dhanOrderService.placeOrder(clientId, request);
-		// call broker API here
+
+	    System.out.println("🟢 BUY CALL");
+
+	    dhanOrderService.placeOrder(accessToken, request)
+	            .doOnSuccess(response ->
+	                    System.out.println("BUY CALL :: " + response))
+	            .doOnError(error ->
+	                    System.out.println("❌ BUY CALL ERROR :: " + error.getMessage()))
+	            .subscribe();
 	}
 
 	private void placePutOrder(DhanOrderRequest request) {
-		System.out.println("🔴 BUY PUT");
-		dhanOrderService.placeOrder(clientId, request);
+
+	    System.out.println("🔴 BUY PUT");
+
+	    dhanOrderService.placeOrder(accessToken, request)
+	            .doOnSuccess(response ->
+	                    System.out.println("BUY PUT :: " + response))
+	            .doOnError(error ->
+	                    System.out.println("❌ BUY PUT ERROR :: " + error.getMessage()))
+	            .subscribe();
 	}
 
 	private void exitCall(DhanOrderRequest request) {
-		System.out.println("⚪ EXIT CALL");
-		dhanOrderService.placeOrder(clientId, request);
+
+	    System.out.println("⚪ EXIT CALL");
+
+	    dhanOrderService.placeOrder(accessToken, request)
+	            .doOnSuccess(response ->
+	                    System.out.println("SELL CALL :: " + response))
+	            .doOnError(error ->
+	                    System.out.println("❌ SELL CALL ERROR :: " + error.getMessage()))
+	            .subscribe();
 	}
 
 	private void exitPut(DhanOrderRequest request) {
-		System.out.println("⚪ EXIT PUT");
-		dhanOrderService.placeOrder(clientId, request);
+
+	    System.out.println("⚪ EXIT PUT");
+
+	    dhanOrderService.placeOrder(accessToken, request)
+	            .doOnSuccess(response ->
+	                    System.out.println("SELL PUT :: " + response))
+	            .doOnError(error ->
+	                    System.out.println("❌ SELL PUT ERROR :: " + error.getMessage()))
+	            .subscribe();
 	}
 
 //    @Component
