@@ -65,5 +65,13 @@ public class DhanMarketDataService {
 		});
 		return listRsiCandle;
 	}
+	
+	public String downloadInstrumentFile() {
+        return dhanWebClient.get()
+                .uri("/v2/instrument/NSE_FNO")
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+    }
 
 }
