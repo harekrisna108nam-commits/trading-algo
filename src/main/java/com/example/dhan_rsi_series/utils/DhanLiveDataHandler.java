@@ -944,8 +944,8 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 		this.session = session;
 
-		int callId = 57774;
-		int putId = 57666;
+		int callId = 62609;
+		int putId = 62406;
 
 		Mono<Void> resubscribe = sendAllSubscriptions();
 

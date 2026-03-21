@@ -20,7 +20,7 @@ public class DhanOrderService {
         return dhanWebClient.post()
                 .uri("/v2/orders")
                 .header("Content-Type", "application/json")
-                .header("access-token", accessToken)
+                //.header("access-token", accessToken)
                 .bodyValue(request)
                 .retrieve()
                 .onStatus(
