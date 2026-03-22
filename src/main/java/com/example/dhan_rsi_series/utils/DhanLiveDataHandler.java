@@ -19,6 +19,7 @@ import com.example.dhan_rsi_series.enums.FlowSignal;
 import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
+import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
 import com.example.dhan_rsi_series.service.CandleRsiService;
 import com.example.dhan_rsi_series.service.DhanOrderService;
 
@@ -715,7 +716,8 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	private final DpiAggregatorService aggregator;
 	private final FlowSignalService signalService;
 	private volatile WebSocketSession session;
-	private OptionRsiRepository repository;
+	private OptionRsiRepository rsiRepository;
+	private OptionTransactionRepository transactionRepository;
 	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
 
 	@Value("${dhan.client-id}")
@@ -726,13 +728,15 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	
 	private final DhanOrderService dhanOrderService;
 	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
-			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository repository, DhanOrderService dhanOrderService) {
+			DpiAggregatorService aggregator, FlowSignalService signalService,
+			OptionRsiRepository rsiRepository, DhanOrderService dhanOrderService, OptionTransactionRepository transactionRepository) {
 		this.rsiService = rsiService;
 		this.store = store;
 		this.signalService = signalService;
 		this.aggregator = aggregator;
-		this.repository = repository;
+		this.rsiRepository = rsiRepository;
 		this.dhanOrderService = dhanOrderService;
+		this.transactionRepository = transactionRepository;
 	}
 
 //    @Override
@@ -952,9 +956,11 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		// =========================================================
 		// 1️⃣ Tick stream (safe decode)
 		// =========================================================
-		Flux<Tick> ticks = session.receive().filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
-				.mapNotNull(m -> decode(m.getPayload())) // ✅ null safe
-				.share();
+		Flux<Tick> ticks = session.receive()
+		        .filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
+		        .mapNotNull(m -> decode(m.getPayload())) // null safe
+		        .filter(t -> t.ltp() >= 10 && t.ltp() <= 300) // LTP range filter
+		        .share();
 
 		// =========================================================
 		// 2️⃣ RSI stream (PARALLEL + NULL SAFE)
@@ -1282,7 +1288,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                     aggregator.reset(60);
 
                     return Mono.fromCallable(() ->
-                            repository.saveAll(list)
+                    rsiRepository.saveAll(list)
                     )
                     .subscribeOn(Schedulers.boundedElastic())
                     .then();

@@ -2,6 +2,8 @@ package com.example.dhan_rsi_series.utils;
 
 
 import java.io.StringReader;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,19 +31,30 @@ public class InstrumentParser {
                 String exchId = line[0];
                 String segment = line[1];
                 String securityId = line[2];
+                String instr = line[4];
                 String symbolName = line[7];
-                String expiryDate = line[12];
+                String expiryDateStr = line[12];
                 double strikePrice = Double.parseDouble(line[13]);
                 String optionTypeRaw = line[14];
                 String optionType = mapOptionType(optionTypeRaw);
                 String exchangeSegment = getExchangeSegment(exchId, segment);
-                if (exchangeSegment.equalsIgnoreCase("NSE_FNO")) {
+                
+             // Convert String → LocalDate
+                LocalDate expiryDate = LocalDate.parse(expiryDateStr);
+
+                // Current date
+                LocalDate today = LocalDate.now();
+
+                // Calculate days remaining
+                long daysToExpiry = ChronoUnit.DAYS.between(today, expiryDate);
+                
+                if (exchangeSegment.equalsIgnoreCase("NSE_FNO") && instr.equalsIgnoreCase("OPTIDX") && daysToExpiry<=7) {
                 	Instrument instrument = new Instrument(
                             securityId,
                             symbolName,
                             strikePrice,
                             optionType,
-                            expiryDate,
+                            expiryDateStr,
                             exchangeSegment
                     );
 
