@@ -26,7 +26,7 @@ public class InstrumentParser {
             String[] line;
             reader.readNext(); // skip header
 
-            while ((line = reader.readNext()) != null) {
+            while ((line = reader.readNext()) != null ) {//&&  !line[13].isEmpty()
                 
                 String exchId = line[0];
                 String segment = line[1];
@@ -47,8 +47,8 @@ public class InstrumentParser {
 
                 // Calculate days remaining
                 long daysToExpiry = ChronoUnit.DAYS.between(today, expiryDate);
-                
-                if (exchangeSegment.equalsIgnoreCase("NSE_FNO") && instr.equalsIgnoreCase("OPTIDX") && daysToExpiry<=7) {
+                // (strikePrice<=20000 && strikePrice>=30000) &&
+                if (exchangeSegment.equalsIgnoreCase("NSE_FNO") && (strikePrice>=20000 && strikePrice<=26000) && instr.equalsIgnoreCase("OPTIDX") && daysToExpiry<=7) {
                 	Instrument instrument = new Instrument(
                             securityId,
                             symbolName,

@@ -1,5 +1,6 @@
 package com.example.dhan_rsi_series.service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,12 +67,50 @@ public class DhanMarketDataService {
 		return listRsiCandle;
 	}
 	
-	public String downloadInstrumentFile() {
-        return dhanWebClient.get()
-                .uri("/v2/instrument/NSE_FNO")
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-    }
+//	public String downloadInstrumentFile() {
+//
+//	    byte[] responseBytes = dhanWebClient.get()
+//	            .uri("/v2/instrument/NSE_FNO")
+//	            .retrieve()
+//	            .bodyToMono(byte[].class)   // ✅ FIX HERE
+//	            .block();
+//
+//	    if (responseBytes == null || responseBytes.length == 0) {
+//	        throw new RuntimeException("❌ Empty instrument response");
+//	    }
+//
+//	    String csvData = new String(responseBytes, StandardCharsets.UTF_8);
+//
+//	    System.out.println("✅ CSV Size: " + csvData.length());
+//
+//	    return csvData;
+//	}
 
+	
+	public String downloadInstrumentFile() {
+
+	    byte[] responseBytes = dhanWebClient.get()
+	            .uri("/v2/instrument/NSE_FNO")
+	            //.header("access-token", token)
+	            .header("Accept", "*/*")              // ✅ important
+	            .header("Connection", "keep-alive")   // ✅ sometimes required
+	            .retrieve()
+	            .onStatus(status -> !status.is2xxSuccessful(), resp ->
+	                resp.bodyToMono(String.class)
+	                    .doOnNext(body -> System.out.println("❌ ERROR BODY: " + body))
+	                    .then(Mono.error(new RuntimeException("API failed")))
+	            )
+	            .bodyToMono(byte[].class)
+	            .block();
+
+	    if (responseBytes == null || responseBytes.length == 0) {
+	        throw new RuntimeException("❌ Empty instrument response");
+	    }
+
+	    String csvData = new String(responseBytes, StandardCharsets.UTF_8);
+
+	    System.out.println("✅ CSV Size: " + csvData.length());
+
+	    return csvData;
+	}
 }

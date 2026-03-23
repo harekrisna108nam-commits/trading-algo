@@ -4,11 +4,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.example.dhan_rsi_series.service.DhanAuthService;
+
+import reactor.netty.http.client.HttpClient;
 
 @Configuration
 public class WebClientConfig {
@@ -36,17 +40,40 @@ public class WebClientConfig {
 //                .build();
 //    }
     
+//    @Bean
+//    public WebClient dhanWebClient() {
+//
+//        return WebClient.builder()
+//            .baseUrl(baseUrl)
+//            .filter(authFilter())
+//            .filter((req, next) -> {
+//                System.out.println("HEADERS => " + req.headers());
+//                return next.exchange(req);
+//            })
+//            .build();
+//    }
+    
     @Bean
     public WebClient dhanWebClient() {
 
+        HttpClient httpClient = HttpClient.create()
+                .followRedirect(true); // ✅ CRITICAL FIX
+
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs()
+                        .maxInMemorySize(20 * 1024 * 1024)) // ✅ 20MB buffer (CSV is ~15MB)
+                .build();
+
         return WebClient.builder()
-            .baseUrl(baseUrl)
-            .filter(authFilter())
-            .filter((req, next) -> {
-                System.out.println("HEADERS => " + req.headers());
-                return next.exchange(req);
-            })
-            .build();
+                .baseUrl(baseUrl)
+                .clientConnector(new ReactorClientHttpConnector(httpClient)) // ✅ attach client
+                .exchangeStrategies(strategies) // ✅ increase buffer
+                .filter(authFilter())
+                .filter((req, next) -> {
+                    System.out.println("HEADERS => " + req.headers());
+                    return next.exchange(req);
+                })
+                .build();
     }
     
     // 🔐 Inject token dynamically

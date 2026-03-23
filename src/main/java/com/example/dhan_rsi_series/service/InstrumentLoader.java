@@ -32,7 +32,8 @@ public class InstrumentLoader {
 	}
 
 	// Monday to Friday at 9:00 AM
-	@Scheduled(cron = "0 0 9 ? * MON-FRI", zone = "Asia/Kolkata")
+	//@Scheduled(cron = "0 0 9 ? * MON-FRI", zone = "Asia/Kolkata")
+	@Scheduled(cron = "0 42 07 * * ?", zone = "Asia/Kolkata")
 	public void loadInstruments() {
 
 	    System.out.println("Downloading instrument file...");
@@ -43,8 +44,9 @@ public class InstrumentLoader {
 
 	    System.out.println("Total Instruments Loaded: " + instrumentMap.size());
 
-	    Flux.fromIterable(instrumentMap.entrySet())
 
+	    //.filter(entry->entry.getValue().getStrikePrice()>=20000 && entry.getValue().getStrikePrice()<=30000)
+	    Flux.fromIterable(instrumentMap.entrySet())
 	        // 1️⃣ persist
 	        .doOnNext(entry ->
 	            store.add(

@@ -3,8 +3,10 @@ package com.example.dhan_rsi_series.utils;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -15,12 +17,14 @@ import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 
 import com.example.dhan_rsi_series.entity.OptionRsi;
+import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
 import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
 import com.example.dhan_rsi_series.service.CandleRsiService;
+import com.example.dhan_rsi_series.service.DhanFundLimitService;
 import com.example.dhan_rsi_series.service.DhanOrderService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -28,684 +32,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.ObjectMapper;
-
-/*@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    private final ObjectMapper mapper = new ObjectMapper();
-    private static final int RSI_PERIOD = 14;
-    private static final long CANDLE_DURATION_MS = 5_000;
-    
-    // ================= STATE =================
-
-    private Candle currentCandle;
-    private long candleStartTime = -1;
-
-    private final Deque<Double> closePrices = new ArrayDeque<>();
-
-    private Double avgGain = null;
-    private Double avgLoss = null;
-    
- // ================= SOCKET =================
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        String subscribe = """
-        {
-          "RequestCode": 15,
-          "InstrumentCount": 1,
-          "InstrumentList": [
-            {
-              "ExchangeSegment": "NSE_FNO",
-              "SecurityId": "58650"
-            }
-          ]
-        }
-        """;
-
-        Mono<Void> send = session.send(
-            Mono.just(session.textMessage(subscribe))
-        );
-
-        Mono<Void> receive = session.receive()
-            .doOnNext(msg -> {
-                if (msg.getType() == WebSocketMessage.Type.BINARY) {
-                    handleBinary(msg.getPayload());
-                }
-            })
-            .doOnComplete(() ->
-                System.out.println("WebSocket closed by server")
-            )
-            .then();
-
-        Mono<Void> heartbeat = Flux.interval(Duration.ofSeconds(10))
-            .flatMap(i ->
-                session.send(
-                    Mono.just(session.pingMessage(db -> db.allocateBuffer()))
-                )
-            )
-            .then();
-
-        return Mono.when(send, receive, heartbeat);
-    }
-
-    // ================= BINARY =================
-
-    private void handleBinary(DataBuffer buffer) {
-
-        byte[] bytes = new byte[buffer.readableByteCount()];
-        buffer.read(bytes);
-
-        System.out.println(
-            "RAW(hex) → " + HexFormat.of().formatHex(bytes)
-        );
-
-        decodeNseFnoTicker(bytes);
-    }
-
-    // ================= NSE_FNO DECODER =================
-
-    private void decodeNseFnoTicker(byte[] bytes) {
-
-        ByteBuffer bb = ByteBuffer
-                .wrap(bytes)
-                .order(ByteOrder.LITTLE_ENDIAN);
-
-        // Minimum NSE_FNO tick size
-        if (bb.remaining() < 12) return;
-
-        short messageType = bb.getShort();      // 2 bytes
-        short exchangeSeg = bb.getShort();      // 2 bytes
-        int securityId    = bb.getInt();        // 4 bytes
-        float ltp         = bb.getFloat();      // 4 bytes
-        
-        //processTick(ltp);
-
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("type", "NSE_FNO_TICK");
-        json.put("messageType", messageType);
-        json.put("exchangeSegment", exchangeSeg);
-        json.put("securityId", securityId);
-        json.put("ltp", ltp);
-        json.put("timestamp", System.currentTimeMillis());
-
-        try {
-            System.out.println(
-                mapper.writerWithDefaultPrettyPrinter()
-                      .writeValueAsString(json)
-            );
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void processTick(double ltp) {
-
-        long now = System.currentTimeMillis();
-
-        if (candleStartTime == -1) {
-            startNewCandle(now, ltp);
-            return;
-        }
-
-        if (now - candleStartTime < CANDLE_DURATION_MS) {
-            currentCandle.update(ltp);
-        } else {
-            closeCandle();
-            startNewCandle(now, ltp);
-        }
-    }
-
-    private void startNewCandle(long time, double price) {
-        candleStartTime = time;
-        currentCandle = new Candle(price);
-    }
-
-    private void closeCandle() {
-
-        double close = currentCandle.close;
-        closePrices.addLast(close);
-
-        if (closePrices.size() > RSI_PERIOD) {
-            closePrices.removeFirst();
-        }
-
-        if (closePrices.size() == RSI_PERIOD) {
-            double rsi = calculateRSI(close);
-            printRsi(close, rsi);
-        }
-    }
-
-    // ================= RSI =================
-
-    private double calculateRSI(double latestClose) {
-
-        if (avgGain == null) {
-            initializeRsi();
-        } else {
-            double prevClose = getPreviousClose();
-            double change = latestClose - prevClose;
-
-            double gain = Math.max(change, 0);
-            double loss = Math.max(-change, 0);
-
-            avgGain = (avgGain * (RSI_PERIOD - 1) + gain) / RSI_PERIOD;
-            avgLoss = (avgLoss * (RSI_PERIOD - 1) + loss) / RSI_PERIOD;
-        }
-
-        if (avgLoss == 0) return 100;
-
-        double rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
-    }
-
-    private void initializeRsi() {
-
-        Iterator<Double> it = closePrices.iterator();
-        double prev = it.next();
-
-        double gain = 0, loss = 0;
-
-        while (it.hasNext()) {
-            double curr = it.next();
-            double diff = curr - prev;
-
-            if (diff > 0) gain += diff;
-            else loss -= diff;
-
-            prev = curr;
-        }
-
-        avgGain = gain / RSI_PERIOD;
-        avgLoss = loss / RSI_PERIOD;
-    }
-
-    private double getPreviousClose() {
-        Iterator<Double> it = closePrices.descendingIterator();
-        it.next();
-        return it.next();
-    }
-
-    // ================= OUTPUT =================
-
-    private void printRsi(double close, double rsi) {
-
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("candleDuration", "5s");
-        json.put("close", close);
-        json.put("rsiPeriod", RSI_PERIOD);
-        json.put("rsi", Math.round(rsi * 100.0) / 100.0);
-        json.put("timestamp", System.currentTimeMillis());
-
-        try {
-            System.out.println(
-                    mapper.writerWithDefaultPrettyPrinter()
-                            .writeValueAsString(json)
-            );
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    // ================= MODEL =================
-
-    static class Candle {
-        double open, high, low, close;
-
-        Candle(double price) {
-            open = high = low = close = price;
-        }
-
-        void update(double price) {
-            close = price;
-            high = Math.max(high, price);
-            low = Math.min(low, price);
-        }
-    }
-}*/
-
-/*@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    @Autowired
-    private RsiRepository repo;
-
-    private final Map<Integer, RsiProcessor> processors = new HashMap<>();
-
-    @PostConstruct
-    void init() {
-        processors.put(58711, new RsiProcessor("58711", "CALL", repo));
-        processors.put(58650, new RsiProcessor("58650", "PUT", repo));
-    }
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        String subscribe = """
-        {
-          "RequestCode": 21,
-          "InstrumentCount": 2,
-          "InstrumentList": [
-            { "ExchangeSegment": "NSE_FNO", "SecurityId": "58711" },
-            { "ExchangeSegment": "NSE_FNO", "SecurityId": "58650" }
-          ]
-        }
-        """;
-
-        Mono<Void> send = session.send(
-            Mono.just(session.textMessage(subscribe))
-        );
-
-        Mono<Void> receive = session.receive()
-            .doOnNext(msg -> {
-                if (msg.getType() == WebSocketMessage.Type.BINARY) {
-                    processBinary(msg.getPayload());
-                }
-            })
-            .then();
-
-        Mono<Void> heartbeat = Flux.interval(Duration.ofSeconds(10))
-            .flatMap(i ->
-                session.send(
-                    Mono.just(session.pingMessage(db -> db.allocateBuffer()))
-                )
-            )
-            .then();
-
-        return Mono.when(send, receive, heartbeat);
-    }
-
-    private void processBinary(DataBuffer buffer) {
-
-        byte[] bytes = new byte[buffer.readableByteCount()];
-        buffer.read(bytes);
-
-        ByteBuffer bb = ByteBuffer.wrap(bytes)
-            .order(ByteOrder.LITTLE_ENDIAN);
-
-        if (bb.remaining() < 12) return;
-
-        bb.getShort(); // messageType
-        bb.getShort(); // exchange
-        int securityId = bb.getInt();
-        float ltp = bb.getFloat();
-
-        RsiProcessor processor = processors.get(securityId);
-        if (processor != null) {
-            processor.onTick(ltp);
-        }
-    }
-}*/
-
-/*@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    private final CandleRsiService rsiService;
-
-    public DhanLiveDataHandler(CandleRsiService rsiService) {
-        this.rsiService = rsiService;
-    }
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        String subscribe = """
-        {
-          "RequestCode": 15,
-          "InstrumentCount": 2,
-          "InstrumentList": [
-            { "ExchangeSegment": "NSE_FNO", "SecurityId": "58650" },
-            { "ExchangeSegment": "NSE_FNO", "SecurityId": "58711" }
-          ]
-        }
-        """;
-
-        Mono<Void> send = session.send(
-            Mono.just(session.textMessage(subscribe))
-        );
-
-        Mono<Void> receive = session.receive()
-            .filter(msg -> msg.getType() == WebSocketMessage.Type.BINARY)
-            .doOnNext(msg -> decode(msg.getPayload()))
-            .then();
-
-        Mono<Void> heartbeat = Flux.interval(Duration.ofSeconds(10))
-            .flatMap(i -> session.send(
-                Mono.just(session.pingMessage(
-                    db -> db.allocateBuffer()))
-            ))
-            .then();
-
-        return Mono.when(send, receive, heartbeat);
-    }
-
-    // ================= BINARY DECODER =================
-
-    private void decode(DataBuffer buffer) {
-
-        byte[] bytes = new byte[buffer.readableByteCount()];
-        buffer.read(bytes);
-        
-        System.out.println("Live:: "+bytes);
-
-        ByteBuffer bb = ByteBuffer
-                .wrap(bytes)
-                .order(ByteOrder.LITTLE_ENDIAN);
-
-        if (bb.remaining() < 12) return;
-
-        short msgType = bb.getShort();
-        short exchange = bb.getShort();
-        int securityId = bb.getInt();
-        float ltp = bb.getFloat();
-
-        String optionType =
-                (securityId == 58650) ? "PUT" : "CALL";
-
-        // 🔥 5-second candle
-        rsiService.onLtp(
-            "NIFTY", securityId,
-            optionType, ltp, 5
-        );
-
-        // 🔥 1-minute candle
-        rsiService.onLtp(
-            "NIFTY", securityId,
-            optionType, ltp, 60
-        );
-    }
-}*/
-
-/*@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    private final CandleRsiService rsiService;
-
-    public DhanLiveDataHandler(CandleRsiService rsiService) {
-        this.rsiService = rsiService;
-    }
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        String subscribe = """
-        {
-          "RequestCode": 15,
-          "InstrumentCount": 2,
-          "InstrumentList": [
-            { "ExchangeSegment": "NSE_FNO", "SecurityId": "58650" },
-            { "ExchangeSegment": "NSE_FNO", "SecurityId": "58711" }
-          ]
-        }
-        """;
-
-        Flux<WebSocketMessage> outbound = Flux.concat(
-        	    Mono.just(session.textMessage(subscribe)),
-        	    Flux.interval(Duration.ofSeconds(10))
-        	        .map(i -> session.pingMessage(f ->
-        	            f.allocateBuffer(0)))
-        	);
-
-
-        Mono<Void> inbound = session.receive()
-            .filter(msg -> msg.getType() == WebSocketMessage.Type.BINARY)
-            .doOnNext(msg -> decode(msg.getPayload()))
-            .doFinally(sig ->
-                System.out.println("WebSocket session ended: " + sig))
-            .then();
-
-        return session.send(outbound).and(inbound);
-    }
-
-    private void decode(DataBuffer buffer) {
-        byte[] bytes = new byte[buffer.readableByteCount()];
-        buffer.read(bytes);
-
-        ByteBuffer bb = ByteBuffer.wrap(bytes)
-                .order(ByteOrder.LITTLE_ENDIAN);
-
-        if (bb.remaining() < 12) return;
-
-        bb.getShort(); // msgType
-        bb.getShort(); // exchange
-        int securityId = bb.getInt();
-        float ltp = bb.getFloat();
-
-        String optionType = (securityId == 58650) ? "PUT" : "CALL";
-
-        rsiService.onLtp("NIFTY", securityId, optionType, ltp, 5);
-        rsiService.onLtp("NIFTY", securityId, optionType, ltp, 60);
-    }
-}*/
-
-/*@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    private final CandleRsiService rsiService;
-    private final DhanSubscriptionStore store;
-
-    private volatile WebSocketSession session;
-
-    public DhanLiveDataHandler(
-            CandleRsiService rsiService,
-            DhanSubscriptionStore store) {
-
-        this.rsiService = rsiService;
-        this.store = store;
-    }
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        this.session = session;
-
-        Mono<Void> resubscribe = sendAllSubscriptions();
-
-        Mono<Void> receive = session.receive()
-            .filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
-            .doOnNext(m -> decode(m.getPayload()))
-            .doFinally(sig -> this.session = null)
-            .then();
-
-        Mono<Void> heartbeat =
-            Flux.interval(Duration.ofSeconds(15))
-                .takeUntilOther(receive)
-                .flatMap(i ->
-                    session.send(
-                        Mono.just(
-                            session.pingMessage(
-                                factory -> factory.allocateBuffer(0)
-                            )
-                        )
-                    )
-                )
-                .then();
-
-        return Mono.when(resubscribe, receive, heartbeat);
-    }
-
-    // ================= SUBSCRIBE =================
-
-    public Mono<Void> subscribe(String exchange, String securityId) {
-
-        store.add(exchange, securityId);
-
-        if (session == null || !session.isOpen()) {
-            return Mono.empty();
-        }
-
-        return sendSubscription(exchange, securityId);
-    }
-
-    private Mono<Void> sendAllSubscriptions() {
-
-        if (store.isEmpty()) {
-            return Mono.empty();
-        }
-
-        return Flux.fromIterable(store.snapshot())
-            .flatMap(key -> {
-                String[] p = key.split("\\|");
-                return sendSubscription(p[0], p[1]);
-            })
-            .then();
-    }
-
-    private Mono<Void> sendSubscription(String exchange, String securityId) {
-
-        String payload = """
-        {
-          "RequestCode": 15,
-          "InstrumentCount": 1,
-          "InstrumentList": [
-            { "ExchangeSegment": "%s", "SecurityId": "%s" }
-          ]
-        }
-        """.formatted(exchange, securityId);
-
-        return session.send(
-            Mono.just(session.textMessage(payload))
-        );
-    }
-
-    // ================= BINARY DECODER =================
-
-    private void decode(DataBuffer buffer) {
-
-        byte[] bytes = new byte[buffer.readableByteCount()];
-        buffer.read(bytes);
-
-        ByteBuffer bb = ByteBuffer.wrap(bytes)
-            .order(ByteOrder.LITTLE_ENDIAN);
-
-        if (bb.remaining() < 12) return;
-
-        bb.getShort(); // msgType
-        bb.getShort(); // exchange
-        int securityId = bb.getInt();
-        float ltp = bb.getFloat();
-
-        String optionType =
-            (securityId == 58650) ? "PUT" : "CALL";
-
-        rsiService.onLtp("NIFTY", securityId, optionType, ltp, 5);
-        rsiService.onLtp("NIFTY", securityId, optionType, ltp, 60);
-    }
-}*/
-
-/*@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    private final CandleRsiService rsiService;
-    private final DhanSubscriptionStore store;
-
-    private volatile WebSocketSession session;
-
-    public DhanLiveDataHandler(
-            CandleRsiService rsiService,
-            DhanSubscriptionStore store) {
-
-        this.rsiService = rsiService;
-        this.store = store;
-    }
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        this.session = session;
-
-        Mono<Void> resubscribe = sendAllSubscriptions();
-
-        Mono<Void> receive = session.receive()
-            .filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
-            .doOnNext(m -> decode(m.getPayload()))
-            .doFinally(s -> this.session = null)
-            .then();
-
-        Mono<Void> heartbeat =
-            Flux.interval(Duration.ofSeconds(15))
-                .takeUntilOther(receive)
-                .flatMap(i ->
-                    session.send(
-                        Mono.just(
-                            session.pingMessage(
-                                f -> f.allocateBuffer(0)
-                            )
-                        )
-                    )
-                )
-                .then();
-
-        return Mono.when(resubscribe, receive, heartbeat);
-    }
-
-    // ================= DECODE =================
-
-    private void decode(DataBuffer buffer) {
-
-        byte[] bytes = new byte[buffer.readableByteCount()];
-        buffer.read(bytes);
-
-        ByteBuffer bb = ByteBuffer
-                .wrap(bytes)
-                .order(ByteOrder.LITTLE_ENDIAN);
-
-        if (bb.remaining() < 12) return;
-
-        bb.getShort();
-        bb.getShort();
-
-        int securityId = bb.getInt();
-        float ltp = bb.getFloat();
-
-        String optionType =
-                (securityId == 58650) ? "PUT" : "CALL";
-
-        rsiService.onLtp("NIFTY", securityId, optionType, ltp, 5);
-        rsiService.onLtp("NIFTY", securityId, optionType, ltp, 60);
-    }
-
-    // ================= SUBSCRIBE =================
-
-    public Mono<Void> subscribe(String exchange, String securityId) {
-
-        store.add(exchange, securityId);
-
-        if (session == null || !session.isOpen()) {
-            return Mono.empty();
-        }
-
-        return sendSubscription(exchange, securityId);
-    }
-
-    private Mono<Void> sendAllSubscriptions() {
-
-        return Flux.fromIterable(store.snapshot())
-            .flatMap(k -> {
-                String[] p = k.split("\\|");
-                return sendSubscription(p[0], p[1]);
-            })
-            .then();
-    }
-
-    private Mono<Void> sendSubscription(String exchange, String securityId) {
-
-        String payload = """
-        {
-          "RequestCode": 15,
-          "InstrumentCount": 1,
-          "InstrumentList": [
-            { "ExchangeSegment": "%s", "SecurityId": "%s" }
-          ]
-        }
-        """.formatted(exchange, securityId);
-
-        return session.send(
-            Mono.just(session.textMessage(payload))
-        );
-    }
-}*/
 
 @Slf4j
 @Component
@@ -721,15 +47,18 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
 
 	@Value("${dhan.client-id}")
-    private String clientId;
-	
+	private String clientId;
+
 	@Value("${dhan.access-token}")
-    private String accessToken;
-	
+	private String accessToken;
+
 	private final DhanOrderService dhanOrderService;
+	private final DhanFundLimitService dhanFundLimitService;
+
 	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
-			DpiAggregatorService aggregator, FlowSignalService signalService,
-			OptionRsiRepository rsiRepository, DhanOrderService dhanOrderService, OptionTransactionRepository transactionRepository) {
+			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository rsiRepository,
+			DhanOrderService dhanOrderService, OptionTransactionRepository transactionRepository,
+			DhanFundLimitService dhanFundLimitService) {
 		this.rsiService = rsiService;
 		this.store = store;
 		this.signalService = signalService;
@@ -737,230 +66,23 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		this.rsiRepository = rsiRepository;
 		this.dhanOrderService = dhanOrderService;
 		this.transactionRepository = transactionRepository;
+		this.dhanFundLimitService = dhanFundLimitService;
 	}
-
-//    @Override
-//    public Mono<Void> handle(WebSocketSession session) {
-//
-//        this.session = session;
-//
-//        // 🔁 Restore subscriptions once connected
-//        Mono<Void> resubscribe = sendAllSubscriptions();
-//
-//        // 📥 Receive binary data
-//        Mono<Void> inbound =
-//            session.receive()
-//                .filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
-//                .doOnNext(m -> decode(m.getPayload()))
-//                .doOnError(e ->
-//                    System.err.println("📴 Session closed: onError")
-//                )
-//                .doFinally(s -> this.session = null)
-//                .then();
-//
-//        // ❤️ Heartbeat (runs forever until socket closes)
-//        Flux<WebSocketMessage> heartbeat =
-//            Flux.interval(Duration.ofSeconds(15))
-//                .map(i ->
-//                    session.pingMessage(f -> f.allocateBuffer(0))
-//                );
-//
-//        // ⬆️ Merge heartbeat into outbound stream
-//        Mono<Void> outbound =
-//            session.send(heartbeat)
-//                .doOnError(e ->
-//                    System.err.println("📴 Heartbeat stopped")
-//                );
-//
-//        // 🚨 KEEP SOCKET ALIVE
-//        return resubscribe
-//            .then(Mono.when(inbound, outbound))
-//            .then(Mono.never()); // 🔥 THIS keeps it open
-//    }
-
-	/*
-	 * @Override public Mono<Void> handle(WebSocketSession session) {
-	 * 
-	 * this.session = session;
-	 * 
-	 * Mono<Void> resubscribe = sendAllSubscriptions();
-	 * 
-	 * // ========================================================= // 1️⃣ Tick
-	 * stream // =========================================================
-	 * Flux<Tick> ticks = session.receive() .filter(m -> m.getType() ==
-	 * WebSocketMessage.Type.BINARY) .map(m -> decode(m.getPayload()))
-	 * .filter(Objects::nonNull) .share();
-	 * 
-	 * // ========================================================= // 2️ Parallel
-	 * Candle + RSI + DPI //
-	 * ========================================================= Flux<OptionRsi>
-	 * rsiFlux = ticks .groupBy(Tick::securityId) .flatMap(group -> group
-	 * .publishOn(Schedulers.parallel()) .concatMap(t -> Flux.just(
-	 * rsiService.onLtp("NIFTY", t.securityId(), t.optionType(), t.ltp(), t.oi(),
-	 * t.highestOi(), t.atp(), 30), rsiService.onLtp("NIFTY", t.securityId(),
-	 * t.optionType(), t.ltp(), t.oi(), t.highestOi(), t.atp(), 60) ))
-	 * .filter(Objects::nonNull) ) .share();
-	 * 
-	 * // ========================================================= // 3️
-	 * Aggregation flow (parallel) //
-	 * ========================================================= Mono<Void>
-	 * aggregation = rsiFlux .publishOn(Schedulers.parallel()) .doOnNext(r ->
-	 * aggregator.add(r, 60)) .then();
-	 * 
-	 * // ========================================================= // 4️⃣ Decision
-	 * flow (single thread) //
-	 * ========================================================= Mono<Void> decision
-	 * = Flux.interval(Duration.ofSeconds(60)) .publishOn(Schedulers.single())
-	 * .doOnNext(i -> {
-	 * 
-	 * OptionRsi target = rsiService.latestTarget(); // your selected strike
-	 * 
-	 * var snap = aggregator.snapshot(60);
-	 * 
-	 * //FlowSignal signal = signalService.evaluate(snap);
-	 * 
-	 * FlowSignal signal = signalService.evaluate(snap, target);
-	 * 
-	 * switch (signal) {
-	 * 
-	 * case BUY_CALL -> placeCallOrder(target); case SELL_CALL -> exitCall(target);
-	 * 
-	 * case BUY_PUT -> placePutOrder(target); case SELL_PUT -> exitPut(target);
-	 * 
-	 * default -> {} }
-	 * 
-	 * aggregator.reset(60); }) .then();
-	 * 
-	 * // ========================================================= // 5️⃣ Heartbeat
-	 * // ========================================================= Mono<Void>
-	 * outbound = session.send( Flux.interval(Duration.ofSeconds(15)) .map(i ->
-	 * session.pingMessage(f -> f.allocateBuffer(0))) );
-	 * 
-	 * // ========================================================= // 6️⃣ Lifecycle
-	 * (NO subscribe() anywhere) //
-	 * ========================================================= return resubscribe
-	 * .then(Mono.when(aggregation, decision, outbound)) .doFinally(s ->
-	 * this.session = null); }
-	 */
-
-//    @Override
-//    public Mono<Void> handle(WebSocketSession session) {
-//
-//        this.session = session;
-//
-//        int callId = 45553; // your chosen strike
-//        int putId  = 45508;
-//
-//        Mono<Void> resubscribe = sendAllSubscriptions();
-//
-//        Flux<Tick> ticks =
-//                session.receive()
-//                       .filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
-//                       //.map(m -> decode(m.getPayload()))
-//                       .mapNotNull(m -> decode(m.getPayload()))
-//                       .filter(Objects::nonNull)
-//                       .share();
-//
-//        Flux<OptionRsi> rsiFlux =
-//                ticks
-//                    .groupBy(Tick::securityId)
-//                    .flatMap(group ->
-//                            group.publishOn(Schedulers.parallel())
-//                                 .map(t -> rsiService.onLtp(
-//                                         "NIFTY",
-//                                         t.securityId(),
-//                                         t.optionType(),
-//                                         t.ltp(),
-//                                         t.oi(),
-//                                         t.highestOi(),
-//                                         t.atp(),
-//                                         60
-//                                 ))
-//                                 .filter(Objects::nonNull)
-//                    )
-//                    .share();
-//
-//        // aggregation
-//        Mono<Void> aggregation =
-//                rsiFlux
-//                    .publishOn(Schedulers.parallel())
-//                    .doOnNext(r -> aggregator.add(r, 60))
-//                    .then();
-//
-//        // decision every 60s
-//        Mono<Void> decision =
-//                Flux.interval(Duration.ofSeconds(60))
-//                    .publishOn(Schedulers.single())
-//                    .doOnNext(i -> {
-//
-//                        var snap = aggregator.snapshot(60);
-//
-//                        OptionRsi call = rsiService.latest(callId);
-//                        OptionRsi put  = rsiService.latest(putId);
-//
-//                        FlowSignal signal =
-//                                signalService.evaluate(snap, call, put);
-//
-//                        switch (signal) {
-//                            case BUY_CALL  -> {
-//                            	call.setBuy(true);
-//                            	placeCallOrder();
-//                            	}
-//                            case SELL_CALL -> {
-//                            	call.setSell(true);
-//                            	exitCall();
-//                            }
-//                            case BUY_PUT   -> {
-//                            	put.setBuy(true);
-//                            	placePutOrder();
-//                            }
-//                            case SELL_PUT  -> {
-//                            	put.setSell(true);
-//                            	exitPut();
-//                            }
-//                            default -> {}
-//                        }
-//                        
-//                        List<OptionRsi> optionRsiList = new ArrayList<>();
-//                        
-//                        optionRsiList.add(call);
-//                        optionRsiList.add(put);
-//                        
-//                        repository.saveAll(optionRsiList);
-//
-//                        optionRsiList.clear();
-//                        aggregator.reset(60);
-//                    })
-//                    .then();
-//
-//        Mono<Void> heartbeat =
-//                session.send(
-//                        Flux.interval(Duration.ofSeconds(15))
-//                            .map(i -> session.pingMessage(f -> f.allocateBuffer(0)))
-//                );
-//
-//        return resubscribe
-//                .then(Mono.when(aggregation, decision, heartbeat));
-//    }
 
 	@Override
 	public Mono<Void> handle(WebSocketSession session) {
 
 		this.session = session;
 
-		int callId = 62609;
-		int putId = 62406;
-
 		Mono<Void> resubscribe = sendAllSubscriptions();
 
 		// =========================================================
 		// 1️⃣ Tick stream (safe decode)
 		// =========================================================
-		Flux<Tick> ticks = session.receive()
-		        .filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
-		        .mapNotNull(m -> decode(m.getPayload())) // null safe
-		        .filter(t -> t.ltp() >= 10 && t.ltp() <= 300) // LTP range filter
-		        .share();
+		Flux<Tick> ticks = session.receive().filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
+				.mapNotNull(m -> decode(m.getPayload())) // null safe
+				.filter(t -> t.atp() >= 10 && t.atp() <= 300) // LTP range filter
+				.share();
 
 		// =========================================================
 		// 2️⃣ RSI stream (PARALLEL + NULL SAFE)
@@ -970,15 +92,13 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 																										// FIX
 						rsiService.onLtp("NIFTY", t.securityId(), t.optionType(), t.ltp(), t.oi(), t.highestOi(),
 								t.atp(), 60))))
-				.doOnNext(rsi ->{
+				.doOnNext(rsi -> {
 
-                    latestRsi.put(rsi.getSecurityId(), rsi);
+					latestRsi.put(rsi.getSecurityId(), rsi);
 
-                    System.out.println("RSI :: " + rsi);
+					System.out.println("RSI :: " + rsi);
 
-                } ).publish().refCount(1);
-
-
+				}).publish().refCount(1);
 
 		// =========================================================
 		// 3️⃣ Aggregation (side-effect safe)
@@ -988,411 +108,318 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		// =========================================================
 		// 4️⃣ Decision every candle close
 		// =========================================================
-//		Mono<Void> decision = Flux.interval(Duration.ofSeconds(60))
-//				.publishOn(Schedulers.single())
-//				.flatMap(i -> {
+		Mono<Void> finalDecision = Flux.interval(Duration.ofSeconds(60)).publishOn(Schedulers.single())
+				.flatMap(tick -> {
+
+					// =========================================
+					// 1️⃣ Fetch active transactions (BLOCKING → WRAPPED)
+					// =========================================
+					Mono<Optional<OptionTransaction>> callTxnMono = Mono.fromCallable(
+							() -> transactionRepository.findByTimeframeAndOptionTypeAndActive("1M", "CALL", true))
+							.subscribeOn(Schedulers.boundedElastic());
+
+					Mono<Optional<OptionTransaction>> putTxnMono = Mono.fromCallable(
+							() -> transactionRepository.findByTimeframeAndOptionTypeAndActive("1M", "PUT", true))
+							.subscribeOn(Schedulers.boundedElastic());
+
+					// =========================================
+					// 2️⃣ Resolve CALL & PUT IDs and Transactions
+					// =========================================
+					return Mono.zip(callTxnMono, putTxnMono).flatMap(tuple -> {
+
+						Optional<OptionTransaction> callOpt = tuple.getT1();
+						Optional<OptionTransaction> putOpt = tuple.getT2();
+
+						// --- CALL ID Mono ---
+						Mono<Integer> callIdMono = callOpt.map(o -> Mono.just(o.getSecurityId()))
+								.orElseGet(() -> Mono.fromSupplier(() ->
+						        latestRsi.values().stream()
+						            .filter(r -> r.getOptionType().equalsIgnoreCase("CALL"))
+						            .filter(r -> r.getAtp() >= 40 && r.getAtp() <= 45)
+						            .max(Comparator.comparing(OptionRsi::getCallFlow))
+						            .map(OptionRsi::getSecurityId)
+						            .orElse(62580)
+						    ));
+
+						// --- PUT ID Mono ---
+						Mono<Integer> putIdMono = putOpt.map(o -> Mono.just(o.getSecurityId()))
+								.orElseGet(() -> Mono.fromSupplier(() ->
+						        latestRsi.values().stream()
+						            .filter(r -> r.getOptionType().equalsIgnoreCase("PUT"))
+						            .filter(r -> r.getAtp() >= 40 && r.getAtp() <= 45)
+						            .max(Comparator.comparing(OptionRsi::getCallFlow))
+						            .map(OptionRsi::getSecurityId)
+						            .orElse(62380)
+						    ));
+
+						// --- Ensure transactions exist ---
+						Mono<OptionTransaction> callTransactionMono = ensureTransaction(callOpt, "CALL", callIdMono);
+						Mono<OptionTransaction> putTransactionMono = ensureTransaction(putOpt, "PUT", putIdMono);
+
+						// =========================================
+						// 3️⃣ Combine CALL & PUT IDs and Transactions
+						// =========================================
+						return Mono.zip(callIdMono, putIdMono, callTransactionMono, putTransactionMono)
+								.flatMap(tuples -> {
+
+									int callId = tuples.getT1();
+									int putId = tuples.getT2();
+
+									OptionTransaction callTxn = tuples.getT3();
+									OptionTransaction putTxn = tuples.getT4();
+
+									var snap = aggregator.snapshot(60);
+									log.info("snap :: {}", snap);
+
+									OptionRsi call = latestRsi.get(callId);
+									OptionRsi put = latestRsi.get(putId);
+
+									if (call == null || put == null)
+										return Mono.empty();
+
+									// =========================================
+									// 4️⃣ Copy Objects
+									// =========================================
+									OptionRsi callSave = new OptionRsi(call);
+									OptionRsi putSave = new OptionRsi(put);
+
+									callSave.setBuy(false);
+									callSave.setSell(false);
+									putSave.setBuy(false);
+									putSave.setSell(false);
+
+									double callFlow = snap.call();
+									double putFlow = snap.put();
+
+									double callDelta = call.getDeltaRsi();
+									double putDelta = put.getDeltaRsi();
+
+									FlowSignal callSignal = signalService.evaluate(callFlow, putFlow, callDelta,
+											"CALL");
+									FlowSignal putSignal = signalService.evaluate(callFlow, putFlow, putDelta, "PUT");
+
+									log.info(
+											"Decision → callFlow={} putFlow={} callΔ={} putΔ={} callSignal={} putSignal={}",
+											callFlow, putFlow, callDelta, putDelta, callSignal, putSignal);
+
+									callSave.setCallFlow(callFlow);
+									callSave.setPutFlow(putFlow);
+									callSave.setNetFlow(snap.net());
+
+									putSave.setCallFlow(callFlow);
+									putSave.setPutFlow(putFlow);
+									putSave.setNetFlow(snap.net());
+
+									// =========================================
+									// 5️⃣ EXECUTE ORDERS (SIDE EFFECT)
+									// =========================================
+									executeCallSignal(callSignal, callSave, Optional.of(callTxn));
+									executePutSignal(putSignal, putSave, Optional.of(putTxn));
+
+									// =========================================
+									// 6️⃣ SAVE DATA
+									// =========================================
+									List<OptionRsi> list = List.of(callSave, putSave);
+									aggregator.reset(60);
+
+									return Mono.fromCallable(() -> rsiRepository.saveAll(list))
+											.subscribeOn(Schedulers.boundedElastic()).then();
+								});
+					});
+				}).then();
+
+		// =====================================================
+		// 5️⃣ Heartbeat
+		// =====================================================
+		Mono<Void> heartbeat = session
+				.send(Flux.interval(Duration.ofSeconds(15)).map(i -> session.pingMessage(f -> f.allocateBuffer(0))));
+
+		// =====================================================
+		// 6️⃣ Lifecycle
+		// =====================================================
+		return resubscribe.then(Mono.when(aggregation, finalDecision, heartbeat).takeUntilOther(session.closeStatus()))
+				.doFinally(s -> this.session = null);
+	}
+
+	// =========================================
+	// Helper Method
+	// =========================================
+
+	private Mono<OptionTransaction> ensureTransaction(Optional<OptionTransaction> optTxn, String type,
+			Mono<Integer> idMono) {
+		if (optTxn.isPresent()) {
+			return Mono.just(optTxn.get());
+		} else {
+			return idMono.flatMap(id -> Mono
+					.fromCallable(() -> transactionRepository.save(OptionTransaction.builder().active(true)
+							.optionType(type).timeframe("1M").securityId(id).build()))
+					.subscribeOn(Schedulers.boundedElastic()));
+		}
+	}
+
+	private void executeCallSignal(FlowSignal signal, OptionRsi callSave, Optional<OptionTransaction> callOptFinal) {
+
+		switch (signal) {
+
+		case BUY_CALL -> {
+			callSave.setBuy(true);
+			placeCallOrder(buildRequest("BUY", callSave));
+		}
+
+		case SELL_CALL -> {
+			callSave.setSell(true);
+			exitCall(buildRequest("SELL", callSave));
+			if (!(callSave.getAtp() >= 40 && callSave.getAtp() <= 45)) {
+				OptionTransaction optionTransaction = new OptionTransaction();
+				if (callOptFinal.isPresent()) {
+					optionTransaction = callOptFinal.get();
+					optionTransaction.setActive(false);
+				}
+				transactionRepository.save(optionTransaction);
+			}
+		}
+
+		default -> {
+		}
+		}
+	}
+
+	private void executePutSignal(FlowSignal signal, OptionRsi putSave, Optional<OptionTransaction> putOptFinal) {
+
+		switch (signal) {
+
+		case BUY_PUT -> {
+			putSave.setBuy(true);
+			placePutOrder(buildRequest("BUY", putSave));
+		}
+
+		case SELL_PUT -> {
+			putSave.setSell(true);
+			exitPut(buildRequest("SELL", putSave));
+			if (!(putSave.getAtp() >= 40 && putSave.getAtp() <= 45)) {
+				OptionTransaction optionTransaction = new OptionTransaction();
+				if (putOptFinal.isPresent()) {
+					optionTransaction = putOptFinal.get();
+					optionTransaction.setActive(false);
+				}
+				transactionRepository.save(optionTransaction);
+			}
+		}
+
+		default -> {
+		}
+		}
+	}
+
+	private DhanOrderRequest buildRequest(String type, OptionRsi rsi) {
+
+//		FundLimitResponse fund = dhanFundLimitService.getFundLimit()
+//	            .subscribeOn(Schedulers.boundedElastic()) // safer thread
+//	            .block();
 //
-//				    var snap = aggregator.snapshot(60);
+//	    if (fund == null) {
+//	        throw new RuntimeException("Failed to fetch fund limit");
+//	    }
 //
-//				    log.info("snap :: {}", snap);
+//	    double availableBalance = fund.getAvailabelBalance();
 //
-//				    OptionRsi call = rsiService.latest(callId);
-//				    OptionRsi put  = rsiService.latest(putId);
+//	    if (availableBalance < 1000) {
+//	        throw new RuntimeException("Insufficient balance");
+//	    }
+	    
+		DhanOrderRequest request = DhanOrderRequest.builder().dhanClientId(clientId)
+				.correlationId(CorrelationIdGenerator.generate("NIFTY")).transactionType(type)
+				.exchangeSegment("NSE_FNO").productType("MARGIN").orderType("MARKET").validity("DAY")
+				.securityId(String.valueOf(rsi.getSecurityId())).quantity(65).disclosedQuantity(0).price(0).triggerPrice(0)
+				.afterMarketOrder(false).build();
+
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			log.info("DHAN ORDER REQUEST => {}", mapper.writeValueAsString(request));
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return request;
+	}
+	
+//	private Mono<DhanOrderRequest> buildRequest(String type, OptionRsi data) {
 //
-//				    if (call == null || put == null)
-//				        return Mono.empty();
+//	    return dhanFundLimitService.getFundLimit()
+//	        .map(fund -> {
 //
-//				    double net = snap.net();
-//				    double callDeltaRsi = call.getDeltaRsi();
-//				    double putDeltaRsi = put.getDeltaRsi();
-//				    
-//				    log.info("net, callDeltaRsi, putDeltaRsi :: {}, {}, {}", net, callDeltaRsi, putDeltaRsi);
+//	            double availableBalance = fund.getAvailabelBalance();
 //
-//				    FlowSignal callSignal =
-//				            signalService.evaluate(net, callDeltaRsi, "CALL");
+//	            // 👉 you can add validation here
+//	            if (availableBalance < 1000) {
+//	                throw new RuntimeException("Insufficient balance");
+//	            }
 //
-//				    FlowSignal putSignal =
-//				            signalService.evaluate(net, putDeltaRsi, "PUT");
-//				    
-//				    log.info("callSignal, putSignal :: {}, {}", callSignal, putSignal);
+//	            DhanOrderRequest request = DhanOrderRequest.builder()
+//	                    .dhanClientId(clientId)
+//	                    .correlationId(CorrelationIdGenerator.generate("NIFTY"))
+//	                    .transactionType(type)
+//	                    .exchangeSegment("NSE_FNO")
+//	                    .productType("MARGIN")
+//	                    .orderType("MARKET")
+//	                    .validity("DAY")
+//	                    .securityId(String.valueOf(data.getSecurityId()))
+//	                    .quantity(65)
+//	                    .disclosedQuantity(0)
+//	                    .price(0)
+//	                    .triggerPrice(0)
+//	                    .afterMarketOrder(false)
+//	                    .build();
 //
+//	            try {
+//	                ObjectMapper mapper = new ObjectMapper();
+//	                log.info("DHAN ORDER REQUEST => {}", mapper.writeValueAsString(request));
+//	            } catch (Exception e) {
+//	                log.error("Error serializing request", e);
+//	            }
 //
-//				    call.setCallFlow(snap.call());
-//				    call.setPutFlow(snap.put());
-//				    call.setNetFlow(snap.net());
-//
-//				    put.setCallFlow(snap.call());
-//				    put.setPutFlow(snap.put());
-//				    put.setNetFlow(snap.net());
-//
-//
-//				    switch (callSignal) {
-//
-//				        case BUY_CALL -> {
-//				            call.setBuy(true);
-//				            placeCallOrder();
-//				        }
-//
-//				        case SELL_CALL -> {
-//				            call.setSell(true);
-//				            exitCall();
-//				        }
-//
-//				        default -> {}
-//				    }
-//
-//
-//				    switch (putSignal) {
-//
-//				        case BUY_PUT -> {
-//				            put.setBuy(true);
-//				            placePutOrder();
-//				        }
-//
-//				        case SELL_PUT -> {
-//				            put.setSell(true);
-//				            exitPut();
-//				        }
-//
-//				        default -> {}
-//				    }
-//
-//
-//				    List<OptionRsi> list = List.of(call, put);
-//
-//				    aggregator.reset(60);
-//
-//				    return Mono.fromCallable(() -> repository.saveAll(list))
-//				            .subscribeOn(Schedulers.boundedElastic())
-//				            .then();
-//
-//				})
-//				.then();
-		
-		
-		Mono<Void> decision = Flux.interval(Duration.ofSeconds(60))
-				.publishOn(Schedulers.single())
-				.flatMap(i -> {
-
-				    var snap = aggregator.snapshot(60);
-
-				    log.info("snap :: {}", snap);
-				    
-				    
-				    
-				    //OptionRsi call = rsiService.latest(callId);
-				    //OptionRsi put  = rsiService.latest(putId);
-				    
-				    OptionRsi call = latestRsi.get(callId);
-                    OptionRsi put  = latestRsi.get(putId);
-
-				    if (call == null || put == null)
-				        return Mono.empty();
-
-				 // ------------------------------------------
-                    // Copy objects (never mutate cached objects)
-                    // ------------------------------------------
-                    OptionRsi callSave = new OptionRsi(call);
-                    OptionRsi putSave  = new OptionRsi(put);
-
-                    // reset flags
-                    callSave.setBuy(false);
-                    callSave.setSell(false);
-
-                    putSave.setBuy(false);
-                    putSave.setSell(false);
-
-                    double callFlow = snap.call();
-                    double putFlow  = snap.put();
-
-                    double callDelta = call.getDeltaRsi();
-                    double putDelta  = put.getDeltaRsi();
-
-                    FlowSignal callSignal =
-                            signalService.evaluate(
-                                    callFlow,
-                                    putFlow,
-                                    callDelta,
-                                    "CALL"
-                            );
-
-                    FlowSignal putSignal =
-                            signalService.evaluate(
-                                    callFlow,
-                                    putFlow,
-                                    putDelta,
-                                    "PUT"
-                            );
-
-                    System.out.println(
-                            "Decision → callFlow=" + callFlow +
-                            " putFlow=" + putFlow +
-                            " callΔ=" + callDelta +
-                            " putΔ=" + putDelta +
-                            " callSignal=" + callSignal +
-                            " putSignal=" + putSignal
-                    );
-
-                    callSave.setCallFlow(callFlow);
-                    callSave.setPutFlow(putFlow);
-                    callSave.setNetFlow(snap.net());
-
-                    putSave.setCallFlow(callFlow);
-                    putSave.setPutFlow(putFlow);
-                    putSave.setNetFlow(snap.net());
-
-                    // ======================================
-                    // CALL SIGNAL
-                    // ======================================
-                    switch (callSignal) {
-
-                        case BUY_CALL -> {
-                        	
-                        	DhanOrderRequest request = DhanOrderRequest.builder()
-                        	        .dhanClientId(clientId)
-                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
-                        	        .transactionType("BUY")
-                        	        .exchangeSegment("NSE_FNO")
-                        	        .productType("MARGIN")
-                        	        .orderType("MARKET")
-                        	        .validity("DAY")
-                        	        .securityId(String.valueOf(callSave.getSecurityId()))
-                        	        .quantity(65)
-                        	        .disclosedQuantity(0)
-                        	        .price(0)
-                        	        .triggerPrice(0)
-                        	        .afterMarketOrder(false)
-                        	        .build();
-                        	
-                            callSave.setBuy(true);
-                            
-                            // 🔍 PRINT REQUEST BODY
-                            try {
-                                ObjectMapper mapper = new ObjectMapper();
-                                String json = mapper.writeValueAsString(request);
-                                System.out.println("DHAN ORDER REQUEST => " + json);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-
-                            
-                            placeCallOrder(request);
-                        }
-
-                        case SELL_CALL -> {
-                        	DhanOrderRequest request = DhanOrderRequest.builder()
-                        	        .dhanClientId(clientId)
-                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
-                        	        .transactionType("SELL")
-                        	        .exchangeSegment("NSE_FNO")
-                        	        .productType("MARGIN")
-                        	        .orderType("MARKET")
-                        	        .validity("DAY")
-                        	        .securityId(String.valueOf(callSave.getSecurityId()))
-                        	        .quantity(65)
-                        	        .disclosedQuantity(0)
-                        	        .price(0)
-                        	        .triggerPrice(0)
-                        	        .afterMarketOrder(false)
-                        	        .build();
-                        	
-                        	 // 🔍 PRINT REQUEST BODY
-                            try {
-                                ObjectMapper mapper = new ObjectMapper();
-                                String json = mapper.writeValueAsString(request);
-                                System.out.println("DHAN ORDER REQUEST => " + json);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-
-                        	
-                            callSave.setSell(true);
-                            exitCall(request);
-                        }
-
-                        default -> {}
-                    }
-
-                    // ======================================
-                    // PUT SIGNAL
-                    // ======================================
-                    switch (putSignal) {
-
-                        case BUY_PUT -> {
-                        	DhanOrderRequest request = DhanOrderRequest.builder()
-                        	        .dhanClientId(clientId)
-                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
-                        	        .transactionType("BUY")
-                        	        .exchangeSegment("NSE_FNO")
-                        	        .productType("MARGIN")
-                        	        .orderType("MARKET")
-                        	        .validity("DAY")
-                        	        .securityId(String.valueOf(putSave.getSecurityId()))
-                        	        .quantity(65)
-                        	        .disclosedQuantity(0)
-                        	        .price(0)
-                        	        .triggerPrice(0)
-                        	        .afterMarketOrder(false)
-                        	        .build();
-                            putSave.setBuy(true);
-                            
-                            // 🔍 PRINT REQUEST BODY
-                            try {
-                                ObjectMapper mapper = new ObjectMapper();
-                                String json = mapper.writeValueAsString(request);
-                                System.out.println("DHAN ORDER REQUEST => " + json);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-
-                            placePutOrder(request);
-                        }
-
-                        case SELL_PUT -> {
-                        	DhanOrderRequest request = DhanOrderRequest.builder()
-                        	        .dhanClientId(clientId)
-                        	        .correlationId(CorrelationIdGenerator.generate("NIFTY"))
-                        	        .transactionType("SELL")
-                        	        .exchangeSegment("NSE_FNO")
-                        	        .productType("MARGIN")
-                        	        .orderType("MARKET")
-                        	        .validity("DAY")
-                        	        .securityId(String.valueOf(putSave.getSecurityId()))
-                        	        .quantity(65)
-                        	        .disclosedQuantity(0)
-                        	        .price(0)
-                        	        .triggerPrice(0)
-                        	        .afterMarketOrder(false)
-                        	        .build();
-                        	
-                        	 // 🔍 PRINT REQUEST BODY
-                            try {
-                                ObjectMapper mapper = new ObjectMapper();
-                                String json = mapper.writeValueAsString(request);
-                                System.out.println("DHAN ORDER REQUEST => " + json);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-
-                        	
-                            putSave.setSell(true);
-                            exitPut(request);
-                        }
-
-                        default -> {}
-                    }
-
-                    List<OptionRsi> list =
-                            List.of(callSave, putSave);
-
-                    aggregator.reset(60);
-
-                    return Mono.fromCallable(() ->
-                    rsiRepository.saveAll(list)
-                    )
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .then();
-
-                })
-                .then();
-
-    // =====================================================
-    // 5️⃣ Heartbeat
-    // =====================================================
-    Mono<Void> heartbeat =
-            session.send(
-                    Flux.interval(Duration.ofSeconds(15))
-                        .map(i ->
-                            session.pingMessage(
-                                    f -> f.allocateBuffer(0)
-                            )
-                        )
-            );
-
-    // =====================================================
-    // 6️⃣ Lifecycle
-    // =====================================================
-    return resubscribe
-            .then(
-                    Mono.when(
-                            aggregation,
-                            decision,
-                            heartbeat
-                    )
-                    .takeUntilOther(session.closeStatus())
-            )
-            .doFinally(s -> this.session = null);
-}
+//	            return request;
+//	        });
+//	}
 
 	private void placeCallOrder(DhanOrderRequest request) {
 
-	    System.out.println("🟢 BUY CALL");
+		System.out.println("🟢 BUY CALL");
 
-	    dhanOrderService.placeOrder(accessToken, request)
-	            .doOnSuccess(response ->
-	                    System.out.println("BUY CALL :: " + response))
-	            .doOnError(error ->
-	                    System.out.println("❌ BUY CALL ERROR :: " + error.getMessage()))
-	            .subscribe();
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("BUY CALL :: " + response))
+				.doOnError(error -> System.out.println("❌ BUY CALL ERROR :: " + error.getMessage())).subscribe();
 	}
 
 	private void placePutOrder(DhanOrderRequest request) {
 
-	    System.out.println("🔴 BUY PUT");
+		System.out.println("🔴 BUY PUT");
 
-	    dhanOrderService.placeOrder(accessToken, request)
-	            .doOnSuccess(response ->
-	                    System.out.println("BUY PUT :: " + response))
-	            .doOnError(error ->
-	                    System.out.println("❌ BUY PUT ERROR :: " + error.getMessage()))
-	            .subscribe();
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("BUY PUT :: " + response))
+				.doOnError(error -> System.out.println("❌ BUY PUT ERROR :: " + error.getMessage())).subscribe();
 	}
 
 	private void exitCall(DhanOrderRequest request) {
 
-	    System.out.println("⚪ EXIT CALL");
+		System.out.println("⚪ EXIT CALL");
 
-	    dhanOrderService.placeOrder(accessToken, request)
-	            .doOnSuccess(response ->
-	                    System.out.println("SELL CALL :: " + response))
-	            .doOnError(error ->
-	                    System.out.println("❌ SELL CALL ERROR :: " + error.getMessage()))
-	            .subscribe();
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("SELL CALL :: " + response))
+				.doOnError(error -> System.out.println("❌ SELL CALL ERROR :: " + error.getMessage())).subscribe();
 	}
 
 	private void exitPut(DhanOrderRequest request) {
 
-	    System.out.println("⚪ EXIT PUT");
+		System.out.println("⚪ EXIT PUT");
 
-	    dhanOrderService.placeOrder(accessToken, request)
-	            .doOnSuccess(response ->
-	                    System.out.println("SELL PUT :: " + response))
-	            .doOnError(error ->
-	                    System.out.println("❌ SELL PUT ERROR :: " + error.getMessage()))
-	            .subscribe();
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("SELL PUT :: " + response))
+				.doOnError(error -> System.out.println("❌ SELL PUT ERROR :: " + error.getMessage())).subscribe();
 	}
 
-//    @Component
-//    public class DhanLiveDataHandler implements WebSocketHandler {
-//
-//        private final CandleRsiService rsiService;
-//        private final DhanSubscriptionStore store;
-//        private final DpiAggregatorService aggregator;
-//
-//        public DhanLiveDataHandler(
-//                CandleRsiService rsiService,
-//                DhanSubscriptionStore store,
-//                DpiAggregatorService aggregator) {
-//
-//            this.rsiService = rsiService;
-//            this.store = store;
-//            this.aggregator = aggregator;
-//        }
-
-	// =====================================================
-
-	// =====================================================
-
+	// ================= DECODE =================
+	
 	private Tick decode(DataBuffer buffer) {
 
 		byte[] bytes = new byte[buffer.readableByteCount()];
@@ -1431,57 +458,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		return new Tick(securityId, ltp, oi, highestOi, atp, optionType);
 	}
 
-	// ================= DECODE =================
-
-	/*
-	 * private void decode(DataBuffer buffer) {
-	 * 
-	 * byte[] bytes = new byte[buffer.readableByteCount()]; buffer.read(bytes);
-	 * 
-	 * ByteBuffer bb = ByteBuffer .wrap(bytes) .order(ByteOrder.LITTLE_ENDIAN);
-	 * 
-	 * if (bb.remaining() < 43) return;
-	 * 
-	 * bb.getShort(); // msgType bb.getShort(); // exchange
-	 * 
-	 * 
-	 * 
-	 * int securityId = bb.getInt(); //float ltp = bb.getFloat();
-	 * 
-	 * //bb.position(8); // skip response header
-	 * 
-	 * float ltp = bb.getFloat(); // 9–12
-	 * 
-	 * short ltq = bb.getShort(); // 13–14
-	 * 
-	 * int ltt = bb.getInt(); // 15–18
-	 * 
-	 * float atp = bb.getFloat(); // 19–22
-	 * 
-	 * int volume = bb.getInt(); // 23–26
-	 * 
-	 * int sellQty = bb.getInt(); // 27–30
-	 * 
-	 * int buyQty = bb.getInt(); // 31–34
-	 * 
-	 * int oi = bb.getInt(); // 35–38 ✅ current OI
-	 * 
-	 * int highestOi = bb.getInt(); // 39–42 ✅ day high OI
-	 * 
-	 * // ✅ Lookup optionType from store String optionType =
-	 * store.optionTypeOf(securityId);
-	 * 
-	 * if (optionType == null) { // not subscribed / unknown instrument return; }
-	 * 
-	 * // 30 second candle Optional<OptionRsi> ofNullable30 =
-	 * Optional.ofNullable(rsiService.onLtp( "NIFTY", securityId, optionType, ltp,
-	 * oi, highestOi, atp, 30 ));
-	 * 
-	 * // 1 minute candle Optional<OptionRsi> ofNullable60 =
-	 * Optional.ofNullable(rsiService.onLtp( "NIFTY", securityId, optionType, ltp,
-	 * oi, highestOi, atp, 60 )); }
-	 */
-
 	// ================= SUBSCRIBE =================
 
 	public Mono<Void> subscribe(String exchange, String securityId, String optionType, double strike) {
@@ -1499,7 +475,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	}
 
 	private Mono<Void> sendAllSubscriptions() {
-
+		//.filter(entry->entry.getStrike()>=20000 && entry.getStrike()<=30000)
 		return Flux.fromIterable(store.all()).flatMap(s -> sendSubscription(s.getExchange(), s.getSecurityId())).then();
 	}
 

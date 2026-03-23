@@ -15,7 +15,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @Entity
-@Table(name = "option_rsi")
+@Table(name = "option_transaction")
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
