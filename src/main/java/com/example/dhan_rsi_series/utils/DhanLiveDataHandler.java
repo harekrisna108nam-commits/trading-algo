@@ -74,6 +74,9 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 		this.session = session;
 
+		//int callId = 62570;
+		//int putId = 62406;
+
 		Mono<Void> resubscribe = sendAllSubscriptions();
 
 		// =========================================================
@@ -92,7 +95,8 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 																										// FIX
 						rsiService.onLtp("NIFTY", t.securityId(), t.optionType(), t.ltp(), t.oi(), t.highestOi(),
 								t.atp(), 30))))
-				.doOnNext(rsi -> {
+
+				.doOnNext(rsi ->{
 
 					latestRsi.put(rsi.getSecurityId(), rsi);
 
@@ -104,6 +108,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		// 3️⃣ Aggregation (side-effect safe)
 		// =========================================================
 		Mono<Void> aggregation = rsiFlux.filter(t -> t.getAtp() >= 6 && t.getAtp() <= 200).flatMap(r -> Mono.fromRunnable(() -> aggregator.add(r, 30))).then();
+
 
 		// =========================================================
 		// 4️⃣ Decision every candle close
@@ -418,8 +423,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 				.doOnError(error -> System.out.println("❌ SELL PUT ERROR :: " + error.getMessage())).subscribe();
 	}
 
+	// =====================================================
 	// ================= DECODE =================
-	
+	// =====================================================
+
 	private Tick decode(DataBuffer buffer) {
 
 		byte[] bytes = new byte[buffer.readableByteCount()];
