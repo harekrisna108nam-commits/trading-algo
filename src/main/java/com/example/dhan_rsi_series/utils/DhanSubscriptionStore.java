@@ -66,7 +66,7 @@ public class DhanSubscriptionStore {
             s.setExchange(exchange);
             s.setSecurityId(securityId);
             s.setOptionType(optionType);
-            s.setStrike(strike);
+           // s.setStrike(strike);
 
             repo.save(s);
         }

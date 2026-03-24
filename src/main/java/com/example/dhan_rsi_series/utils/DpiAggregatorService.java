@@ -90,6 +90,54 @@ public class DpiAggregatorService {
     }
 }*/
 
+//@Service
+//public class DpiAggregatorService {
+//
+//    private final Map<Integer, Bucket> buckets = new ConcurrentHashMap<>();
+//
+//    // =========================================================
+//
+//    public void add(OptionRsi r, int tf) {
+//
+//        Bucket b = buckets.computeIfAbsent(tf, t -> new Bucket());
+//
+//        if ("CALL".equals(r.getOptionType()))
+//            b.call.add(r.getDpi());
+//        else
+//            b.put.add(r.getDpi());
+//    }
+//
+//    // =========================================================
+//
+//    public Snapshot snapshot(int tf) {
+//
+//        Bucket b = buckets.get(tf);
+//        if (b == null) return new Snapshot(0,0);
+//
+//        return new Snapshot(
+//                b.call.sum(),
+//                b.put.sum()
+//        );
+//    }
+//
+//    public void reset(int tf) {
+//        buckets.put(tf, new Bucket());
+//    }
+//
+//    // =========================================================
+//
+//    static class Bucket {
+//        DoubleAdder call = new DoubleAdder();
+//        DoubleAdder put  = new DoubleAdder();
+//    }
+//
+//    // =========================================================
+//
+//    public record Snapshot(double call, double put) {
+//        public double net() { return call - put; }
+//    }
+//}
+
 @Service
 public class DpiAggregatorService {
 
@@ -101,10 +149,13 @@ public class DpiAggregatorService {
 
         Bucket b = buckets.computeIfAbsent(tf, t -> new Bucket());
 
-        if ("CALL".equals(r.getOptionType()))
-            b.call.add(r.getDpi());
-        else
-            b.put.add(r.getDpi());
+        if ("CALL".equals(r.getOptionType())) {
+            b.callDpi.add(r.getDpi());
+            b.callDeltaRsi.add(r.getDeltaRsi());
+        } else {
+            b.putDpi.add(r.getDpi());
+            b.putDeltaRsi.add(r.getDeltaRsi());
+        }
     }
 
     // =========================================================
@@ -112,11 +163,13 @@ public class DpiAggregatorService {
     public Snapshot snapshot(int tf) {
 
         Bucket b = buckets.get(tf);
-        if (b == null) return new Snapshot(0,0);
+        if (b == null) return new Snapshot(0, 0, 0, 0);
 
         return new Snapshot(
-                b.call.sum(),
-                b.put.sum()
+                b.callDpi.sum(),
+                b.putDpi.sum(),
+                b.callDeltaRsi.sum(),
+                b.putDeltaRsi.sum()
         );
     }
 
@@ -127,13 +180,31 @@ public class DpiAggregatorService {
     // =========================================================
 
     static class Bucket {
-        DoubleAdder call = new DoubleAdder();
-        DoubleAdder put  = new DoubleAdder();
+
+        // DPI
+        DoubleAdder callDpi = new DoubleAdder();
+        DoubleAdder putDpi  = new DoubleAdder();
+
+        // Delta RSI
+        DoubleAdder callDeltaRsi = new DoubleAdder();
+        DoubleAdder putDeltaRsi  = new DoubleAdder();
     }
 
     // =========================================================
 
-    public record Snapshot(double call, double put) {
-        public double net() { return call - put; }
+    public record Snapshot(
+            double callDpi,
+            double putDpi,
+            double callDeltaRsi,
+            double putDeltaRsi
+    ) {
+
+        public double netDpi() {
+            return callDpi - putDpi;
+        }
+
+        public double netDeltaRsi() {
+            return callDeltaRsi - putDeltaRsi;
+        }
     }
 }

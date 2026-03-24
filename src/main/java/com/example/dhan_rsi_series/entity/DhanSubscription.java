@@ -35,7 +35,7 @@ public class DhanSubscription {
 	// CALL / PUT (runtime value)
 	private String optionType;
 	
-	private double strike;
+	//private double strike;
 
 	private boolean active = true;
 
