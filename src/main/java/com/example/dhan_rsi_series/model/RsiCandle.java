@@ -16,5 +16,6 @@ public class RsiCandle extends CandleData {
     private double netFlow;
     private double highestOi;
     private double atp;
+    private int securityId;
 }
 

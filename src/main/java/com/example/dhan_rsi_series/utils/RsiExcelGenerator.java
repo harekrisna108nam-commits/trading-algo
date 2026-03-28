@@ -73,8 +73,7 @@ public class RsiExcelGenerator {
                 createCell(row, 3, c.getLow(), dataStyle);
                 createCell(row, 4, c.getClose(), dataStyle);
                 createCell(row, 5, c.getVolume(), dataStyle);
-                createCell(row, 6,
-                        c.getOpen_interest() != null ? c.getOpen_interest() : 0,
+                createCell(row, 6, c.getOpen_interest(),
                         dataStyle);
                 createCell(row, 7, c.getRsi(), dataStyle);
                 createCell(row, 8, c.getDeltaRsi(), dataStyle);

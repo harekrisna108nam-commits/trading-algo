@@ -16,9 +16,9 @@ public class CandleData {
 	private Double high;
 	private Double low;
 	private Double close;
-	private Double volume;
+	private double volume;
 	private Long timestamp;
 	private LocalDateTime dateTime;
-	private Double open_interest;
+	private double open_interest;
 }
 

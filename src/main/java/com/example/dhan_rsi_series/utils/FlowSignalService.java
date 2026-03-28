@@ -38,7 +38,7 @@ public class FlowSignalService {
                 return FlowSignal.BUY_CALL;
 
             // bearish pressure
-            if (normalizedFlow > FLOW_TH && deltaRsi < -DELTA_RSI_TH)
+            if (normalizedFlow < -FLOW_TH && deltaRsi < -DELTA_RSI_TH)
                 return FlowSignal.SELL_CALL;
         }
 
@@ -48,7 +48,7 @@ public class FlowSignalService {
         if ("PUT".equalsIgnoreCase(optionType)) {
 
             // bullish market (sell puts)
-            if (normalizedFlow < -FLOW_TH && deltaRsi < -DELTA_RSI_TH)
+            if (normalizedFlow > FLOW_TH && deltaRsi < -DELTA_RSI_TH)
                 return FlowSignal.SELL_PUT;
 
             // bearish market

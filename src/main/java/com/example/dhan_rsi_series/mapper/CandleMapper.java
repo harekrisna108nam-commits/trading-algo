@@ -55,8 +55,8 @@ public class CandleMapper {
                 .high(candle.getHigh())
                 .low(candle.getLow())
                 .close(candle.getClose())
-                .volume(0.0)                 // not available in OptionRsi
-                .open_interest(Double.parseDouble(String.valueOf(candle.getOi())))          // not available in OptionRsi
+                .volume(Double.valueOf(String.valueOf(candle.getSecurityId())))                 // not available in OptionRsi
+                .open_interest(Double.valueOf(String.valueOf(candle.getOi())))          // not available in OptionRsi
                 .timestamp(null)
                 .dateTime(candle.getCandleTime())
 

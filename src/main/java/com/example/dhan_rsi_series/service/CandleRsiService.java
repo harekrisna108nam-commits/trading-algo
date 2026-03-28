@@ -92,7 +92,7 @@ public class CandleRsiService {
 		double prevRsi = lastRsiMap.getOrDefault(key, rsi);
 
 		// ===== deltas =====
-		int deltaOi = oi - prevOi;
+		int deltaOi = Math.abs(oi - prevOi);
 		double deltaAtp = atp - prevAtp;
 
 		double dpi = deltaOi * deltaAtp * c.close();
