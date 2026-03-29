@@ -45,6 +45,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	private OptionRsiRepository rsiRepository;
 	private OptionTransactionRepository transactionRepository;
 	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
+	private final Map<String, Double> lastNetMap = new ConcurrentHashMap<>();
 
 	@Value("${dhan.client-id}")
 	private String clientId;
@@ -84,7 +85,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		// =========================================================
 		Flux<Tick> ticks = session.receive().filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
 				.mapNotNull(m -> decode(m.getPayload())) // null safe
-				.filter(t -> t.atp() >= 15 && t.atp() <= 425) // LTP range filter
+				.filter(t -> t.atp() >= 8 && t.atp() <= 425) // LTP range filter
 				.share();
 
 		// =========================================================
@@ -140,10 +141,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 								.orElseGet(() -> Mono.fromSupplier(() ->
 						        latestRsi.values().stream()
 						            .filter(r -> r.getOptionType().equalsIgnoreCase("CALL"))
-						            .filter(r -> r.getAtp() >= 70 && r.getAtp() <= 75)
-						            .max(Comparator.comparing(OptionRsi::getCallFlow))
+						            .filter(r -> r.getClose() >= 50 && r.getClose() <= 68)
+						            .max(Comparator.comparing(OptionRsi::getDpi))
 						            .map(OptionRsi::getSecurityId)
-						            .orElse(54532)
+						            .orElse(54506)
 						    ));
 
 						// --- PUT ID Mono ---
@@ -151,10 +152,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 								.orElseGet(() -> Mono.fromSupplier(() ->
 						        latestRsi.values().stream()
 						            .filter(r -> r.getOptionType().equalsIgnoreCase("PUT"))
-						            .filter(r -> r.getAtp() >= 70 && r.getAtp() <= 75)
-						            .max(Comparator.comparing(OptionRsi::getCallFlow))
+						            .filter(r -> r.getClose() >= 50 && r.getClose() <= 68)
+						            .max(Comparator.comparing(OptionRsi::getDpi))
 						            .map(OptionRsi::getSecurityId)
-						            .orElse(54479)
+						            .orElse(54475)
 						    ));
 
 						// --- Ensure transactions exist ---
@@ -166,7 +167,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 						// =========================================
 						return Mono.zip(callIdMono, putIdMono, callTransactionMono, putTransactionMono)
 								.flatMap(tuples -> {
-
+									String netKey = "NIFTY_60";
 									int callId = tuples.getT1();
 									int putId = tuples.getT2();
 
@@ -195,17 +196,31 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 									double callFlow = snap.callDpi();
 									double putFlow = snap.putDpi();
+									double netFlow = snap.netDpi();
+									double callDeltaDeltaLtp = callSave.getDeltaDeltaLtp();
+									double callDeltaLtp = callSave.getDeltaLtp();
+									
+									double putDeltaDeltaLtp = putSave.getDeltaDeltaLtp();
+									double putDeltaLtp = putSave.getDeltaLtp();
+									
+									// get previous net flow
+									double prevNetFlow = lastNetMap.getOrDefault(netKey, netFlow);
 
-									double callDelta = call.getDeltaRsi();
-									double putDelta = put.getDeltaRsi();
+									// calculate delta
+									double deltaNetFlow = netFlow - prevNetFlow;
 
-									FlowSignal callSignal = signalService.evaluate(callFlow, putFlow, callDelta,
-											"CALL");
-									FlowSignal putSignal = signalService.evaluate(callFlow, putFlow, putDelta, "PUT");
+									//double callDelta = call.getDeltaRsi();
+									//double putDelta = put.getDeltaRsi();
+
+									FlowSignal callSignal = signalService.evaluate(callDeltaDeltaLtp, callDeltaLtp, deltaNetFlow,
+											snap, "CALL");
+									
+									FlowSignal putSignal = signalService.evaluate(putDeltaDeltaLtp, putDeltaLtp, deltaNetFlow,
+											snap, "PUT");
 
 									log.info(
 											"Decision → callFlow={} putFlow={} callΔ={} putΔ={} callSignal={} putSignal={}",
-											callFlow, putFlow, callDelta, putDelta, callSignal, putSignal);
+											callFlow, putFlow, callSignal, putSignal);
 
 									callSave.setCallFlow(callFlow);
 									callSave.setPutFlow(putFlow);
@@ -226,7 +241,11 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 									// =========================================
 									List<OptionRsi> list = List.of(callSave, putSave);
 									aggregator.reset(60);
-
+									//===============================================
+									// 7 UPDATE MEMORY
+									//================================================
+									lastNetMap.put(netKey, netFlow);
+									
 									return Mono.fromCallable(() -> rsiRepository.saveAll(list))
 											.subscribeOn(Schedulers.boundedElastic()).then();
 								});
@@ -274,7 +293,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		case SELL_CALL -> {
 			callSave.setSell(true);
 			exitCall(buildRequest("SELL", callSave));
-			if (!(callSave.getAtp() >= 70 && callSave.getAtp() <= 75)) {
+			if (!(callSave.getClose() >= 50 && callSave.getClose() <= 68)) {
 				OptionTransaction optionTransaction = new OptionTransaction();
 				if (callOptFinal.isPresent()) {
 					optionTransaction = callOptFinal.get();
@@ -301,7 +320,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		case SELL_PUT -> {
 			putSave.setSell(true);
 			exitPut(buildRequest("SELL", putSave));
-			if (!(putSave.getAtp() >= 70 && putSave.getAtp() <= 75)) {
+			if (!(putSave.getClose() >= 50 && putSave.getClose() <= 68)) {
 				OptionTransaction optionTransaction = new OptionTransaction();
 				if (putOptFinal.isPresent()) {
 					optionTransaction = putOptFinal.get();

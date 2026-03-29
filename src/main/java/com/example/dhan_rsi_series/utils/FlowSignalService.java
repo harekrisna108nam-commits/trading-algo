@@ -3,6 +3,7 @@ package com.example.dhan_rsi_series.utils;
 import org.springframework.stereotype.Service;
 
 import com.example.dhan_rsi_series.enums.FlowSignal;
+import com.example.dhan_rsi_series.utils.DpiAggregatorService.Snapshot;
 
 @Service
 public class FlowSignalService {
@@ -58,4 +59,44 @@ public class FlowSignalService {
 
         return FlowSignal.HOLD;
     }
+
+	public FlowSignal evaluate(double deltaDeltaLtp, double deltaLtp, double deltaNetFlow, Snapshot snap,
+			String optionType) {
+
+        double net = snap.netDpi();
+        double total = snap.callDpi() + snap.putDpi();
+
+        if (total == 0)
+            return FlowSignal.HOLD;
+
+        // =====================================================
+        // CALL logic
+        // =====================================================
+        if ("CALL".equalsIgnoreCase(optionType)) {
+
+            // bullish pressure
+            if (deltaDeltaLtp > 0 && deltaLtp > 0 && deltaNetFlow > 0 && net >= 0)
+                return FlowSignal.BUY_CALL;
+
+            // bearish pressure
+            if (deltaDeltaLtp < 0 && deltaLtp < 0 && deltaNetFlow < 0 && net <= 0)
+                return FlowSignal.SELL_CALL;
+        }
+
+        // =====================================================
+        // PUT logic
+        // =====================================================
+        if ("PUT".equalsIgnoreCase(optionType)) {
+
+            // bullish market (sell puts)
+        	if (deltaDeltaLtp < 0 && deltaLtp < 0 && deltaNetFlow > 0 && net >= 0)
+                return FlowSignal.SELL_PUT;
+
+            // bearish market
+        	if (deltaDeltaLtp > 0 && deltaLtp > 0 && deltaNetFlow < 0 && net <= 0)
+                return FlowSignal.BUY_PUT;
+        }
+
+        return FlowSignal.HOLD;
+	}
 }

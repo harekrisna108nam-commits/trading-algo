@@ -44,6 +44,8 @@ public class OptionRsi {
     private double callFlow;
     private double putFlow;
     private double netFlow;
+    private double deltaLtp;
+    private double deltaDeltaLtp;
     
  // =========================================
     // Copy constructor (VERY IMPORTANT)
