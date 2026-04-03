@@ -64,10 +64,10 @@ public class FlowSignalService {
 			String optionType) {
 
         double net = snap.netDpi();
-        double total = snap.callDpi() + snap.putDpi();
-
-        if (total == 0)
-            return FlowSignal.HOLD;
+//        double total = snap.callDpi() + snap.putDpi();
+//
+//        if (total == 0)
+//            return FlowSignal.HOLD;
 
         // =====================================================
         // CALL logic

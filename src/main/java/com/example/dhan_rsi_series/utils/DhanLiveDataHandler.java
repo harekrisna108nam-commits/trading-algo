@@ -144,7 +144,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 						            .filter(r -> r.getClose() >= 50 && r.getClose() <= 68)
 						            .max(Comparator.comparing(OptionRsi::getDpi))
 						            .map(OptionRsi::getSecurityId)
-						            .orElse(54506)
+						            .orElse(40752)
 						    ));
 
 						// --- PUT ID Mono ---
@@ -155,7 +155,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 						            .filter(r -> r.getClose() >= 50 && r.getClose() <= 68)
 						            .max(Comparator.comparing(OptionRsi::getDpi))
 						            .map(OptionRsi::getSecurityId)
-						            .orElse(54475)
+						            .orElse(40697)
 						    ));
 
 						// --- Ensure transactions exist ---
