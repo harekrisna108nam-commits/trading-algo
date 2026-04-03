@@ -69,6 +69,11 @@ public class CandleMapper {
                 .netFlow(candle.getNetFlow())
                 .highestOi(candle.getHighestOi())
                 .atp(candle.getAtp())
+                .deltaLtp(candle.getDeltaLtp())
+                .deltaDeltaLtp(candle.getDeltaDeltaLtp())
+                .buy(candle.isBuy())
+                .sell(candle.isSell())
+                //.deltaNet(candle.delta)
                 .build();
     }
 

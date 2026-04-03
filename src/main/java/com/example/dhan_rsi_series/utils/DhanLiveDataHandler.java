@@ -85,7 +85,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		// =========================================================
 		Flux<Tick> ticks = session.receive().filter(m -> m.getType() == WebSocketMessage.Type.BINARY)
 				.mapNotNull(m -> decode(m.getPayload())) // null safe
-				.filter(t -> t.atp() >= 8 && t.atp() <= 425) // LTP range filter
+				.filter(t -> t.atp() >= 8 && t.atp() <= 455) // LTP range filter
 				.share();
 
 		// =========================================================
@@ -141,7 +141,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 								.orElseGet(() -> Mono.fromSupplier(() ->
 						        latestRsi.values().stream()
 						            .filter(r -> r.getOptionType().equalsIgnoreCase("CALL"))
-						            .filter(r -> r.getClose() >= 50 && r.getClose() <= 68)
+						            .filter(r -> r.getClose() >= 90 && r.getClose() <= 120)
 						            .max(Comparator.comparing(OptionRsi::getDpi))
 						            .map(OptionRsi::getSecurityId)
 						            .orElse(40752)
@@ -152,10 +152,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 								.orElseGet(() -> Mono.fromSupplier(() ->
 						        latestRsi.values().stream()
 						            .filter(r -> r.getOptionType().equalsIgnoreCase("PUT"))
-						            .filter(r -> r.getClose() >= 50 && r.getClose() <= 68)
+						            .filter(r -> r.getClose() >= 90 && r.getClose() <= 120)
 						            .max(Comparator.comparing(OptionRsi::getDpi))
 						            .map(OptionRsi::getSecurityId)
-						            .orElse(40697)
+						            .orElse(40693)
 						    ));
 
 						// --- Ensure transactions exist ---

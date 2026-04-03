@@ -51,7 +51,7 @@ public class RsiExcelGenerator {
                     "DateTime", "Open", "High", "Low",
                     "Close", "Volume", "Open Interest", "RSI",
                     "deltaRsi", "callFlow", "putFlow", "netFlow",
-                    "highestOi", "atp"
+                    "highestOi", "atp", "DeltaLtp", "DeltaDeltaLtp", "Buy", "Sell"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -82,6 +82,10 @@ public class RsiExcelGenerator {
                 createCell(row, 11, c.getNetFlow(), dataStyle);
                 createCell(row, 12, c.getHighestOi(), dataStyle);
                 createCell(row, 13, c.getAtp(), dataStyle);
+                createCell(row, 14, c.getDeltaLtp(), dataStyle);
+                createCell(row, 15, c.getDeltaDeltaLtp(), dataStyle);
+                createCell(row, 16, c.isBuy()?"true":"false", dataStyle);
+                createCell(row, 17, c.isSell()?"true":"false", dataStyle);
             }
 
             // ================= AUTO SIZE =================

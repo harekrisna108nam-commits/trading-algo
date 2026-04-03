@@ -535,7 +535,7 @@ public class CandleRsiService {
         CandleSnapshot snap = candle.snapshotAndReset(now, ltp);
 
         return process(symbol, securityId, optionType, timeframeSeconds,
-                snap, oi, highestOi, atp);
+                snap, oi, highestOi, atp, candle.getClose());
     }
 
     // =========================================================
@@ -548,9 +548,9 @@ public class CandleRsiService {
 
     private OptionRsi process(String symbol, int securityId, String optionType,
                               int timeframe, CandleSnapshot c,
-                              int oi, int highestOi, double atp) {
+                              int oi, int highestOi, double atp, double ltp) {
 
-        double ltp = c.close();
+        //double ltp = c.close();
         String key = buildKey(symbol, securityId, timeframe);
 
         Double prevLtp = lastLtpMap.get(key);

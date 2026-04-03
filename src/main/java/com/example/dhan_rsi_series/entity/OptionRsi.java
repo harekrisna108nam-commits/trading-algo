@@ -75,6 +75,8 @@ public class OptionRsi {
 
         this.dpi = other.dpi;
         this.deltaRsi = other.deltaRsi;
+        this.deltaLtp = other.deltaLtp;
+        this.deltaDeltaLtp = other.deltaDeltaLtp;
 
         this.callFlow = other.callFlow;
         this.putFlow = other.putFlow;

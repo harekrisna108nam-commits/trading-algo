@@ -1,5 +1,8 @@
 package com.example.dhan_rsi_series.utils;
 
+import lombok.Getter;
+import lombok.Setter;
+
 //public class CandleState {
 //
 //    private final int timeframeSeconds;
@@ -47,6 +50,8 @@ package com.example.dhan_rsi_series.utils;
 //    }
 //    }
 
+@Getter
+@Setter
 public class CandleState {
 
     private final int timeframeSeconds;

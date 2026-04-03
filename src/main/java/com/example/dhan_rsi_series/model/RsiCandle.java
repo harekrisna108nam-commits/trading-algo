@@ -17,5 +17,10 @@ public class RsiCandle extends CandleData {
     private double highestOi;
     private double atp;
     private int securityId;
+    private double deltaLtp;
+    private double deltaDeltaLtp;
+    private double deltaNet;
+    private boolean buy;
+    private boolean sell;
 }
 
