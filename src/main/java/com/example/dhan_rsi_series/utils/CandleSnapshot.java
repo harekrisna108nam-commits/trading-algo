@@ -5,5 +5,6 @@ public record CandleSnapshot(
         double high,
         double low,
         double close,
-        long startEpoch
+        long startEpoch,
+        double avgLtp
 ) {}

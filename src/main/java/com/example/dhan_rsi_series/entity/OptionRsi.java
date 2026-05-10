@@ -46,6 +46,16 @@ public class OptionRsi {
     private double netFlow;
     private double deltaLtp;
     private double deltaDeltaLtp;
+    private double weightedOi;
+    private double callWeightedOi;
+    private double putWeightedOi;
+    private double gamma;
+    private int maxCallSecurityId;
+    private int maxCallOi;
+    private double maxCallClose;
+    private int maxPutSecurityId;
+    private int maxPutOi;
+    private double maxPutClose;
     
  // =========================================
     // Copy constructor (VERY IMPORTANT)
@@ -81,6 +91,16 @@ public class OptionRsi {
         this.callFlow = other.callFlow;
         this.putFlow = other.putFlow;
         this.netFlow = other.netFlow;
+        this.weightedOi = other.weightedOi;
+        this.callWeightedOi = other.callWeightedOi;
+        this.putWeightedOi = other.putWeightedOi;
+        this.gamma = other.gamma;
+        this.maxCallSecurityId = other.maxCallSecurityId;
+        this.maxCallOi = other.maxCallOi;
+        this.maxCallClose = other.maxCallClose;
+        this.maxPutSecurityId = other.maxPutSecurityId;
+        this.maxPutOi = other.maxPutOi;
+        this.maxPutClose = other.maxPutClose;
     }
 
 }

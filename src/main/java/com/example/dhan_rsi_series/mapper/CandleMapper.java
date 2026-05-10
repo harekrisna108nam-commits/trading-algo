@@ -73,6 +73,16 @@ public class CandleMapper {
                 .deltaDeltaLtp(candle.getDeltaDeltaLtp())
                 .buy(candle.isBuy())
                 .sell(candle.isSell())
+                .weightedOi(candle.getWeightedOi())
+                .callWeightedOi(candle.getCallWeightedOi())
+                .putWeightedOi(candle.getPutWeightedOi())
+                .gama(candle.getGamma())
+                .maxCallSecurityId(candle.getMaxCallSecurityId())
+                .maxCallOi(candle.getMaxCallOi())
+                .maxCallClose(candle.getMaxCallClose())
+                .maxPutSecurityId(candle.getMaxPutSecurityId())
+                .maxPutOi(candle.getMaxPutOi())
+                .maxPutClose(candle.getMaxPutClose())
                 //.deltaNet(candle.delta)
                 .build();
     }

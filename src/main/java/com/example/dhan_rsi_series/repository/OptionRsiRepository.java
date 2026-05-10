@@ -22,4 +22,12 @@ public interface OptionRsiRepository extends JpaRepository<OptionRsi, Long> {
                 @Param("securityId") int securityId,
                 @Param("timeframe") String timeframe
         );
+
+    @Query(value = """
+    	    SELECT * FROM option_rsi
+    	    WHERE timeframe = :timeframe
+    	    ORDER BY candle_time DESC
+    	    LIMIT 1
+    	    """, nativeQuery = true)
+    	OptionRsi findLatestByTimeframe(@Param("timeframe") String timeframe);
 }

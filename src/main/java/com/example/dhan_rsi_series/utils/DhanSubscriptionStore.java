@@ -55,8 +55,35 @@ public class DhanSubscriptionStore {
     public void add(
             String exchange,
             String securityId,
+            double gamma,
             String optionType,
-            double strike
+            int strike
+            
+    ) {
+
+        if (!repo.existsByExchangeAndSecurityId(exchange, securityId)) {
+
+            DhanSubscription s = new DhanSubscription();
+            s.setExchange(exchange);
+            s.setSecurityId(securityId);
+            s.setGamma(gamma);
+            s.setOptionType(optionType);
+            s.setStrike(strike);
+
+            repo.save(s);
+        }
+
+        optionMap.put(
+            Integer.parseInt(securityId),
+            optionType
+        );
+    }
+    
+    public void add(
+            String exchange,
+            String securityId,
+            String optionType,
+            int strike
             
     ) {
 
@@ -66,7 +93,7 @@ public class DhanSubscriptionStore {
             s.setExchange(exchange);
             s.setSecurityId(securityId);
             s.setOptionType(optionType);
-           // s.setStrike(strike);
+            s.setStrike(strike);
 
             repo.save(s);
         }
@@ -84,4 +111,5 @@ public class DhanSubscriptionStore {
     public Set<DhanSubscription> all() {
         return Set.copyOf(repo.findAll());
     }
+
 }

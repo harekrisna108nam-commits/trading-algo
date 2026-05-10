@@ -49,9 +49,12 @@ public class RsiExcelGenerator {
      
             String[] headers = {
                     "DateTime", "Open", "High", "Low",
-                    "Close", "Volume", "Open Interest", "RSI",
+                    "Close", "Security Id", "Open Interest", "RSI",
                     "deltaRsi", "callFlow", "putFlow", "netFlow",
-                    "highestOi", "atp", "DeltaLtp", "DeltaDeltaLtp", "Buy", "Sell"
+                    "highestOi", "atp", "DeltaLtp", "DeltaDeltaLtp",
+                    "WOI", "Call-WOI", "Put-WOI", "Gama", "Buy", "Sell", 
+                    "MaxCallSecurityId", "MaxCallOi", "MaxCallClose",
+                    "MaxPutSecurityId", "MaxPutOi", "MaxPutClose"
             };
 
             for (int i = 0; i < headers.length; i++) {
@@ -84,8 +87,18 @@ public class RsiExcelGenerator {
                 createCell(row, 13, c.getAtp(), dataStyle);
                 createCell(row, 14, c.getDeltaLtp(), dataStyle);
                 createCell(row, 15, c.getDeltaDeltaLtp(), dataStyle);
-                createCell(row, 16, c.isBuy()?"true":"false", dataStyle);
-                createCell(row, 17, c.isSell()?"true":"false", dataStyle);
+                createCell(row, 16, c.getWeightedOi(), dataStyle);
+                createCell(row, 17, c.getCallWeightedOi(), dataStyle);
+                createCell(row, 18, c.getPutWeightedOi(), dataStyle);
+                createCell(row, 19, c.getGama(), dataStyle);
+                createCell(row, 20, c.isBuy()?"true":"false", dataStyle);
+                createCell(row, 21, c.isSell()?"true":"false", dataStyle);
+                createCell(row, 22, c.getMaxCallSecurityId(), dataStyle);
+                createCell(row, 23, c.getMaxCallOi(), dataStyle);
+                createCell(row, 24, c.getMaxCallClose(), dataStyle);
+                createCell(row, 25, c.getMaxPutSecurityId(), dataStyle);
+                createCell(row, 26, c.getMaxPutOi(), dataStyle);
+                createCell(row, 27, c.getMaxPutClose(), dataStyle);
             }
 
             // ================= AUTO SIZE =================

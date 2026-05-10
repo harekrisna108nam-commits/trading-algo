@@ -4,14 +4,14 @@ public class Instrument {
 
     private String securityId;
     private String symbolName;
-    private double strikePrice;
+    private Integer strikePrice;
     private String optionType;
     private String expiryDate;
     private String exchangeSegment;
 
     public Instrument(String securityId,
                       String symbolName,
-                      double strikePrice,
+                      int strikePrice,
                       String optionType,
                       String expiryDate,
                       String exchangeSegment) {
@@ -26,7 +26,7 @@ public class Instrument {
 
     public String getSecurityId() { return securityId; }
     public String getSymbolName() { return symbolName; }
-    public double getStrikePrice() { return strikePrice; }
+    public int getStrikePrice() { return strikePrice; }
     public String getOptionType() { return optionType; }
     public String getExpiryDate() { return expiryDate; }
     public String getExchangeSegment() { return exchangeSegment; }

@@ -8,4 +8,6 @@ import com.example.dhan_rsi_series.entity.OptionTransaction;
 
 public interface OptionTransactionRepository extends JpaRepository<OptionTransaction, Long> {
 	Optional<OptionTransaction> findByTimeframeAndOptionTypeAndActive(String timeframe, String optionType, boolean active);
+	
+	Optional<OptionTransaction> findTopByOptionTypeOrderByCreatedAtDesc(String optionType);
 }

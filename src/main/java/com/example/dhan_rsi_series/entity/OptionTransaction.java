@@ -1,6 +1,11 @@
 package com.example.dhan_rsi_series.entity;
 
+import java.time.LocalDateTime;
+
+import com.example.dhan_rsi_series.utils.OptionTransactionListener;
+
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -20,6 +25,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EntityListeners(OptionTransactionListener.class)
 public class OptionTransaction {
 
     @Id
@@ -31,7 +37,10 @@ public class OptionTransaction {
     private String optionType;    // CALL / PUT
     private String timeframe;     // 5S / 1M
     private boolean sold;
+    private long position;
     private boolean active;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
     
  // =========================================
     // Copy constructor (VERY IMPORTANT)
@@ -43,7 +52,10 @@ public class OptionTransaction {
         this.optionType = other.optionType;
         this.timeframe = other.timeframe;
         this.sold = other.sold;
+        this.position = other.position; // MISSING
         this.active = other.active;
+        this.createdAt = other.createdAt;
+        this.updatedAt = other.updatedAt;
     }
 
 }
