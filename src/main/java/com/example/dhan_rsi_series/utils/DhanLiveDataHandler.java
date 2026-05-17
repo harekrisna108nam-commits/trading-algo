@@ -3,6 +3,7 @@ package com.example.dhan_rsi_series.utils;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -13,7 +14,6 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -766,7 +766,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		this.session = session;
 
 		// Subscribe FUTURE
-		subscribe("NSE_FNO", String.valueOf(FUTURE_ID), "FUTURE", 0);
+		//subscribe("NSE_FNO", String.valueOf(FUTURE_ID), "FUTURE", 0);
 
 		Mono<Void> resubscribe = sendAllSubscriptions();
 
@@ -1177,9 +1177,9 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 	// ================= SUBSCRIBE =================
 
-	public Mono<Void> subscribe(String exchange, String securityId, String optionType, int strike) {
+	public Mono<Void> subscribe(String exchange, String securityId, String optionType, Integer strike, LocalDate expiry) {
 
-		store.add(exchange, securityId, optionType, strike);
+		store.add(exchange, securityId, optionType, strike, expiry);
 
 		if (session == null || !session.isOpen()) {
 			return Mono.empty();

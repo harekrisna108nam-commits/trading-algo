@@ -1,5 +1,6 @@
 package com.example.dhan_rsi_series.utils;
 
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,8 +58,8 @@ public class DhanSubscriptionStore {
             String securityId,
             double gamma,
             String optionType,
-            int strike
-            
+            int strike,
+            LocalDate expiry
     ) {
 
         if (!repo.existsByExchangeAndSecurityId(exchange, securityId)) {
@@ -69,7 +70,7 @@ public class DhanSubscriptionStore {
             s.setGamma(gamma);
             s.setOptionType(optionType);
             s.setStrike(strike);
-
+            s.setExpiryDate(expiry);
             repo.save(s);
         }
 
@@ -83,7 +84,8 @@ public class DhanSubscriptionStore {
             String exchange,
             String securityId,
             String optionType,
-            int strike
+            int strike,
+            LocalDate expiry
             
     ) {
 
@@ -94,7 +96,7 @@ public class DhanSubscriptionStore {
             s.setSecurityId(securityId);
             s.setOptionType(optionType);
             s.setStrike(strike);
-
+            s.setExpiryDate(expiry);
             repo.save(s);
         }
 

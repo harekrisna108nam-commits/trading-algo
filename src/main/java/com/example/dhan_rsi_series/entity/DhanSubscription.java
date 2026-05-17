@@ -1,5 +1,6 @@
 package com.example.dhan_rsi_series.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -42,4 +43,6 @@ public class DhanSubscription {
 	private boolean active = true;
 
 	private LocalDateTime createdAt = LocalDateTime.now();
+	
+	private LocalDate expiryDate;
 }

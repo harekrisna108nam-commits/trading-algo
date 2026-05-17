@@ -10,7 +10,7 @@ public class SubscriptionRequest {
     private String exchange;
     //private String securityId;
     private List<String> securityIds;
-    private Map<String, Integer> map;
+    private Map<String, ExpiryStrike> map;
     private String optionType; // CALL / PUT
     //private int strike;
 }

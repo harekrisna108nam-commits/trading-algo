@@ -1,7 +1,9 @@
 package com.example.dhan_rsi_series.service;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -1537,7 +1539,9 @@ public class CandleRsiService {
     // ================= STRIKE CACHE (🔥 NO DB CALL) =================
     private final Map<Integer, Integer> strikeToSecurityCall = new ConcurrentHashMap<>();
     private final Map<Integer, Integer> strikeToSecurityPut  = new ConcurrentHashMap<>();
-    private final Map<Integer, Integer> securityToStrikeMap  = new ConcurrentHashMap<>();
+    private final Map<Integer, DhanSubscription> securityToStrikeMap  = new ConcurrentHashMap<>();
+    private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityCall  = new ConcurrentHashMap<>();
+    private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityPut  = new ConcurrentHashMap<>();
 
     public final Map<Integer, OptionRsi> latestMap = new ConcurrentHashMap<>();
 
@@ -1555,19 +1559,30 @@ public class CandleRsiService {
 
         List<DhanSubscription> list = subscriptionRepository.findByActiveTrue();
 
-        for (DhanSubscription s : list) {
+        list.stream().forEach(s -> {
 
             int strike = (int) s.getStrike();
             int secId  = Integer.parseInt(s.getSecurityId());
 
-            securityToStrikeMap.put(secId, strike);
+            securityToStrikeMap.put(secId, s);
 
             if ("CALL".equalsIgnoreCase(s.getOptionType())) {
+
                 strikeToSecurityCall.put(strike, secId);
+
+                expiryToStrikeToSecurityCall
+                        .computeIfAbsent(s.getExpiryDate(), k -> new HashMap<>())
+                        .put(strike, secId);
+
             } else {
+
                 strikeToSecurityPut.put(strike, secId);
+
+                expiryToStrikeToSecurityPut
+                        .computeIfAbsent(s.getExpiryDate(), k -> new HashMap<>())
+                        .put(strike, secId);
             }
-        }
+        });
 
         log.info("✅ Loaded {} subscriptions into memory", list.size());
     }
@@ -1643,19 +1658,20 @@ public class CandleRsiService {
     // =========================================================
     private boolean tryCalculateGamma(int securityId, String optionType) {
 
-        Integer strikeInt = securityToStrikeMap.get(securityId);
+    	DhanSubscription ds = securityToStrikeMap.get(securityId);
+    	Integer strikeInt = ds.getStrike();
         if (strikeInt == null) return false;
 
         int lowerStrike = strikeInt - 50;
         int upperStrike = strikeInt + 50;
 
         Integer lowerId = "CALL".equalsIgnoreCase(optionType)
-                ? strikeToSecurityCall.get(lowerStrike)
-                : strikeToSecurityPut.get(lowerStrike);
-
+                ? expiryToStrikeToSecurityCall.get(ds.getExpiryDate()).get(lowerStrike)
+                : expiryToStrikeToSecurityPut.get(ds.getExpiryDate()).get(lowerStrike);
+        
         Integer upperId = "CALL".equalsIgnoreCase(optionType)
-                ? strikeToSecurityCall.get(upperStrike)
-                : strikeToSecurityPut.get(upperStrike);
+        		? expiryToStrikeToSecurityCall.get(ds.getExpiryDate()).get(upperStrike)
+                : expiryToStrikeToSecurityPut.get(ds.getExpiryDate()).get(upperStrike);
 
         // EDGE → gamma = 0
         if (lowerId == null || upperId == null) {
