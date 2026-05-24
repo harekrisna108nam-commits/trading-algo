@@ -1,5 +1,7 @@
 package com.example.dhan_rsi_series.utils;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -7,9 +9,10 @@ import java.util.concurrent.atomic.DoubleAdder;
 
 import org.springframework.stereotype.Service;
 
-import com.example.dhan_rsi_series.entity.DhanSubscription;
+import com.example.dhan_rsi_series.entity.MoneyFlow;
 import com.example.dhan_rsi_series.entity.OptionRsi;
-import com.example.dhan_rsi_series.repository.OptionRsiRepository;
+import com.example.dhan_rsi_series.repository.MoneyFlowRepository;
+import com.example.dhan_rsi_series.utils.DpiAggregatorService.Bucket;
 
 import jakarta.annotation.PostConstruct;
 
@@ -213,7 +216,6 @@ public class DpiAggregatorService {
 //    }
 //}
 
-
 //@Service
 //public class DpiAggregatorService {
 //
@@ -308,7 +310,7 @@ public class DpiAggregatorService {
 //    }
 //}
 
-@Service
+/*@Service
 public class DpiAggregatorService {
 
     private final Map<Integer, Bucket> buckets = new ConcurrentHashMap<>();
@@ -451,5 +453,239 @@ public class DpiAggregatorService {
         if (v == null || Double.isNaN(v) || Double.isInfinite(v)) return 0.0;
         return v;
     }
-}
+}*/
 
+@Service
+public class DpiAggregatorService {
+
+	// =========================================================
+	// TF -> EXPIRY -> BUCKET
+	// =========================================================
+	private final Map<Integer, ConcurrentHashMap<LocalDate, Bucket>> buckets = new ConcurrentHashMap<>();
+
+	private final MoneyFlowRepository moneyFlowRepository;
+
+	public DpiAggregatorService(MoneyFlowRepository moneyFlowRepository) {
+		this.moneyFlowRepository = moneyFlowRepository;
+	}
+
+	// =========================================================
+	// 🔥 LOAD LAST FLOW FROM MONEY_FLOW TABLE
+	// =========================================================
+	@PostConstruct
+	public void loadMoneyFlow() {
+
+		try {
+
+			List<MoneyFlow> flows = moneyFlowRepository.findAllActive();
+
+			if (flows == null || flows.isEmpty()) {
+
+				System.out.println("🟡 No MoneyFlow data found → Starting from ZERO");
+				return;
+			}
+
+			ConcurrentHashMap<LocalDate, Bucket> expiryMap = buckets.computeIfAbsent(5, t -> new ConcurrentHashMap<>());
+
+			for (MoneyFlow flow : flows) {
+
+				LocalDate expiry = flow.getExpiryDate();
+
+				if (expiry == null) {
+					continue;
+				}
+
+				Bucket bucket = expiryMap.computeIfAbsent(expiry, e -> new Bucket());
+
+				bucket.baseCallFlow = safe(flow.getCallFlow());
+				bucket.basePutFlow = safe(flow.getPutFlow());
+
+				System.out.println("✅ Restored Flow | Expiry: " + expiry + " | CALL: " + bucket.baseCallFlow
+						+ " | PUT: " + bucket.basePutFlow);
+			}
+
+			System.out.println("✅ MoneyFlow restoration completed");
+
+		} catch (Exception e) {
+
+			System.out.println("❌ Failed loading MoneyFlow table");
+			e.printStackTrace();
+		}
+	}
+
+	// =========================================================
+	// 🔥 ADD REAL-TIME DATA
+	// =========================================================
+	public void add(OptionRsi r, int tf) {
+
+	    if (r.getExpiry() == null) {
+	        return;
+	    }
+
+	    ConcurrentHashMap<LocalDate, Bucket> expiryMap =
+	            buckets.computeIfAbsent(tf, t -> new ConcurrentHashMap<>());
+
+	    Bucket bucket = expiryMap.computeIfAbsent(
+	            r.getExpiry(),
+	            e -> new Bucket()
+	    );
+
+	    // =====================================================
+	    // UPDATE LIVE FLOW
+	    // =====================================================
+	    if ("CALL".equalsIgnoreCase(r.getOptionType())) {
+
+	        bucket.callDpi.add(safe(r.getDpi()));
+	        bucket.callWeightedOi.add(safe(r.getWeightedOi()));
+
+	    } else {
+
+	        bucket.putDpi.add(safe(r.getDpi()));
+	        bucket.putWeightedOi.add(safe(r.getWeightedOi()));
+	    }
+
+	    // =====================================================
+	    // 🔥 AUTO PERSIST AFTER UPDATE
+	    // =====================================================
+	    persistFlow(tf, r.getExpiry());
+	}
+
+	// =========================================================
+	// 🔥 SNAPSHOT (TOTAL OF ALL EXPIRIES)
+	// =========================================================
+	public Snapshot snapshot(int tf) {
+
+		ConcurrentHashMap<LocalDate, Bucket> expiryMap = buckets.get(tf);
+
+		if (expiryMap == null || expiryMap.isEmpty()) {
+			return new Snapshot(0, 0, 0, 0, 0);
+		}
+
+		double totalCallFlow = 0;
+		double totalPutFlow = 0;
+
+		double totalCallOi = 0;
+		double totalPutOi = 0;
+
+		// ✅ SUM ALL EXPIRIES
+		for (Bucket bucket : expiryMap.values()) {
+
+			totalCallFlow += bucket.baseCallFlow + bucket.callDpi.sum();
+			totalPutFlow += bucket.basePutFlow + bucket.putDpi.sum();
+
+			totalCallOi += bucket.callWeightedOi.sum();
+			totalPutOi += bucket.putWeightedOi.sum();
+		}
+
+		return new Snapshot(totalCallFlow, totalPutFlow, totalCallOi, totalPutOi, totalCallOi - totalPutOi);
+	}
+	
+	// =========================================================
+	// 🔥 SAVE FLOW TO DB BY EXPIRY
+	// =========================================================
+	private void persistFlow(int tf, LocalDate expiry) {
+
+	    try {
+
+	        ConcurrentHashMap<LocalDate, Bucket> expiryMap = buckets.get(tf);
+
+	        if (expiryMap == null) {
+	            return;
+	        }
+
+	        Bucket bucket = expiryMap.get(expiry);
+
+	        if (bucket == null) {
+	            return;
+	        }
+
+	        // =================================================
+	        // TOTAL FLOW = BASE + LIVE
+	        // =================================================
+	        double finalCallFlow =
+	                bucket.baseCallFlow + bucket.callDpi.sum();
+
+	        double finalPutFlow =
+	                bucket.basePutFlow + bucket.putDpi.sum();
+
+	        // =================================================
+	        // FIND EXISTING RECORD
+	        // =================================================
+	        MoneyFlow moneyFlow =
+	                moneyFlowRepository.findByExpiryDate(expiry)
+	                        .orElseGet(MoneyFlow::new);
+
+	        // =================================================
+	        // UPDATE ENTITY
+	        // =================================================
+	        moneyFlow.setExpiryDate(expiry);
+	        moneyFlow.setCallFlow(finalCallFlow);
+	        moneyFlow.setPutFlow(finalPutFlow);
+	        moneyFlow.setActive(true);
+	        moneyFlow.setCreatedAt(LocalDateTime.now());
+
+	        // =================================================
+	        // SAVE
+	        // =================================================
+	        moneyFlowRepository.save(moneyFlow);
+
+	    } catch (Exception e) {
+
+	        System.out.println("❌ Failed to persist MoneyFlow");
+	        e.printStackTrace();
+	    }
+	}
+
+	// =========================================================
+	// RESET
+	// =========================================================
+	public void reset(int tf, LocalDate expiry) {
+
+		ConcurrentHashMap<LocalDate, Bucket> expiryMap = buckets.get(tf);
+
+		if (expiryMap != null) {
+			expiryMap.remove(expiry);
+		}
+	}
+
+	// =========================================================
+	// INTERNAL BUCKET
+	// =========================================================
+	static class Bucket {
+
+		// BASE FROM DB
+		double baseCallFlow = 0;
+		double basePutFlow = 0;
+
+		// LIVE DPI
+		DoubleAdder callDpi = new DoubleAdder();
+		DoubleAdder putDpi = new DoubleAdder();
+
+		// OI
+		DoubleAdder callWeightedOi = new DoubleAdder();
+		DoubleAdder putWeightedOi = new DoubleAdder();
+	}
+
+	// =========================================================
+	// SNAPSHOT MODEL
+	// =========================================================
+	public record Snapshot(double callDpi, double putDpi, double callWeightedOi, double putWeightedOi,
+			double weightedOi) {
+
+		public double netDpi() {
+			return callDpi - putDpi;
+		}
+	}
+
+	// =========================================================
+	// SAFE NULL / NaN
+	// =========================================================
+	private double safe(Double v) {
+
+		if (v == null || Double.isNaN(v) || Double.isInfinite(v)) {
+			return 0.0;
+		}
+
+		return v;
+	}
+}

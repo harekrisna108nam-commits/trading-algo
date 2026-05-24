@@ -1,5 +1,6 @@
 package com.example.dhan_rsi_series.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Entity;
@@ -56,6 +57,7 @@ public class OptionRsi {
     private int maxPutSecurityId;
     private int maxPutOi;
     private double maxPutClose;
+    private LocalDate expiry;
     
  // =========================================
     // Copy constructor (VERY IMPORTANT)

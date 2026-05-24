@@ -5,15 +5,12 @@ import java.nio.ByteOrder;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -22,6 +19,7 @@ import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 
+import com.example.dhan_rsi_series.entity.DhanSubscription;
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
@@ -36,7 +34,9 @@ import com.example.dhan_rsi_series.service.DhanOrderService;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.BufferOverflowStrategy;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.GroupedFlux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.ObjectMapper;
 
@@ -719,7 +719,7 @@ import tools.jackson.databind.ObjectMapper;
 //	}
 //}
 
-@Slf4j
+/*@Slf4j
 @Component
 public class DhanLiveDataHandler implements WebSocketHandler {
 
@@ -786,96 +786,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 					aggregator.add(rsi, 5);
 				}).doOnError(err -> log.error("❌ RSI ERROR", err)).publish().refCount(1);
 
-		
-		/*Mono<Void> finalDecision = rsiFlux
-                .bufferUntilChanged(OptionRsi::getCandleTime)
-                .concatMap(batch -> Mono.fromCallable(() -> {
-
-                    if (batch.isEmpty()) return null;
-
-                    var snap = aggregator.snapshot(5);
-
-                    double callFlow = snap.callDpi();
-                    double putFlow = snap.putDpi();
-                    double netFlow = snap.netDpi();
-
-                    log.info("📊 SNAP => call={} put={} net={}", callFlow, putFlow, netFlow);
-
-                    OptionRsi call = batch.stream()
-                            .filter(r -> "CALL".equalsIgnoreCase(r.getOptionType()))
-                            .filter(r -> r.getSecurityId() == 41758)
-                            .findFirst()
-                            .orElse(null);
-
-                    OptionRsi put = batch.stream()
-                            .filter(r -> "PUT".equalsIgnoreCase(r.getOptionType()))
-                            .filter(r -> r.getSecurityId() == 41759)
-                            .findFirst()
-                            .orElse(null);
-
-                    if (call == null || put == null) {
-                        log.warn("⚠ Missing CALL/PUT in batch");
-                        return null;
-                    }
-
-                    OptionRsi callSave = new OptionRsi(call);
-                    OptionRsi putSave = new OptionRsi(put);
-
-                    callSave.setCallFlow(callFlow);
-                    callSave.setPutFlow(putFlow);
-                    callSave.setNetFlow(netFlow);
-                    callSave.setCallWeightedOi(snap.callWeightedOi());
-
-                    putSave.setCallFlow(callFlow);
-                    putSave.setPutFlow(putFlow);
-                    putSave.setNetFlow(netFlow);
-                    putSave.setPutWeightedOi(snap.putWeightedOi());
-
-                    Optional<OptionRsi> maxCall = latestRsi.values().stream()
-                            .filter(r -> "CALL".equalsIgnoreCase(r.getOptionType()))
-                            .max(Comparator.comparing(OptionRsi::getOi));
-
-                    Optional<OptionRsi> maxPut = latestRsi.values().stream()
-                            .filter(r -> "PUT".equalsIgnoreCase(r.getOptionType()))
-                            .max(Comparator.comparing(OptionRsi::getOi));
-
-                    maxCall.ifPresent(r -> {
-                        callSave.setMaxCallSecurityId(r.getSecurityId());
-                        callSave.setMaxCallOi(r.getOi());
-                        callSave.setMaxCallClose(r.getClose());
-                    });
-
-                    maxPut.ifPresent(r -> {
-                        putSave.setMaxPutSecurityId(r.getSecurityId());
-                        putSave.setMaxPutOi(r.getOi());
-                        putSave.setMaxPutClose(r.getClose());
-                    });
-
-                    boolean callBuy = maxPut.map(r -> r.getClose() <= 5).orElse(false);
-                    boolean putBuy = maxCall.map(r -> r.getClose() <= 5).orElse(false);
-
-                    FlowSignal callSignal = signalService.evaluate(snap, "CALL", callBuy, putBuy);
-                    FlowSignal putSignal = signalService.evaluate(snap, "PUT", callBuy, putBuy);
-
-                    executeCallSignal(callSignal, callSave, Optional.empty());
-                    executePutSignal(putSignal, putSave, Optional.empty());
-
-                    return Stream.of(callSave, putSave)
-                            .sorted(Comparator.comparing(OptionRsi::getCandleTime))
-                            .toList();
-
-                }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(list -> {
-                    if (list == null) return Mono.empty();
-
-                    return Mono.fromCallable(() -> rsiRepository.saveAll(list))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .doOnSuccess(s -> log.info("✅ Saved {}", s.size()))
-                            .then();
-                })
-                .then();*/
-
 		Mono<Void> finalDecision = rsiFlux
 
 				// group by candle
@@ -892,72 +802,6 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		return resubscribe.then(Mono.when(rsiFlux.then(), finalDecision, heartbeat))
 				.takeUntilOther(session.closeStatus()).doFinally(s -> this.session = null);
 	}
-
-	/*
-	 * private Mono<Void> processBatch(List<OptionRsi> batch) {
-	 * 
-	 * return Mono.fromCallable(() -> {
-	 * 
-	 * if (batch.isEmpty()) return (Void) null;
-	 * 
-	 * // ================= SNAPSHOT ================= var snap =
-	 * aggregator.snapshot(5);
-	 * 
-	 * double callFlow = snap.callDpi(); double putFlow = snap.putDpi(); double
-	 * netFlow = snap.netDpi();
-	 * 
-	 * // ================= FETCH TXN ================= OptionTransaction callTxn =
-	 * transactionRepository .findByTimeframeAndOptionTypeAndActive("5S", "CALL",
-	 * true) .orElseGet(() -> transactionRepository.save(newTxn("CALL")));
-	 * 
-	 * OptionTransaction putTxn = transactionRepository
-	 * .findByTimeframeAndOptionTypeAndActive("5S", "PUT", true) .orElseGet(() ->
-	 * transactionRepository.save(newTxn("PUT")));
-	 * 
-	 * // ================= FETCH RSI ================= OptionRsi call =
-	 * batch.stream() .filter(r -> r.getSecurityId() == callTxn.getSecurityId())
-	 * .findFirst() .orElseThrow(() -> new RuntimeException("Missing CALL RSI"));
-	 * 
-	 * OptionRsi put = batch.stream() .filter(r -> r.getSecurityId() ==
-	 * putTxn.getSecurityId()) .findFirst() .orElseThrow(() -> new
-	 * RuntimeException("Missing PUT RSI"));
-	 * 
-	 * OptionRsi callSave = new OptionRsi(call); OptionRsi putSave = new
-	 * OptionRsi(put);
-	 * 
-	 * // ================= FLOW ================= callSave.setCallFlow(callFlow);
-	 * callSave.setPutFlow(putFlow); callSave.setNetFlow(netFlow);
-	 * 
-	 * putSave.setCallFlow(callFlow); putSave.setPutFlow(putFlow);
-	 * putSave.setNetFlow(netFlow);
-	 * 
-	 * // ================= BUY LOGIC ================= Optional<OptionRsi> maxCall
-	 * = latestRsi.values().stream() .filter(r ->
-	 * "CALL".equalsIgnoreCase(r.getOptionType()))
-	 * .max(Comparator.comparing(OptionRsi::getOi));
-	 * 
-	 * Optional<OptionRsi> maxPut = latestRsi.values().stream() .filter(r ->
-	 * "PUT".equalsIgnoreCase(r.getOptionType()))
-	 * .max(Comparator.comparing(OptionRsi::getOi));
-	 * 
-	 * boolean callBuy = maxPut.map(r -> r.getClose() <= 5).orElse(false); boolean
-	 * putBuy = maxCall.map(r -> r.getClose() <= 5).orElse(false);
-	 * 
-	 * // ================= SIGNAL ================= FlowSignal callSignal =
-	 * signalService.evaluate(snap, "CALL", callBuy, putBuy); FlowSignal putSignal =
-	 * signalService.evaluate(snap, "PUT", callBuy, putBuy);
-	 * 
-	 * // ================= EXECUTION =================
-	 * updateCallTransaction(callTxn, callSignal); updatePutTransaction(putTxn,
-	 * putSignal);
-	 * 
-	 * // ================= SAVE =================
-	 * rsiRepository.saveAll(List.of(callSave, putSave));
-	 * 
-	 * return (Void) null;
-	 * 
-	 * }).subscribeOn(Schedulers.boundedElastic()); // ✅ ONLY HERE }
-	 */
 
 	private Mono<Void> processBatch(List<OptionRsi> batch) {
 
@@ -1209,4 +1053,900 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 		return session.send(Mono.just(session.textMessage(payload)));
 	}
+}*/
+
+
+@Slf4j
+@Component
+public class DhanLiveDataHandler implements WebSocketHandler {
+
+    private final CandleRsiService rsiService;
+    private final DhanSubscriptionStore store;
+    private final DpiAggregatorService aggregator;
+    private final FlowSignalService signalService;
+    private final OptionRsiRepository rsiRepository;
+    private final OptionTransactionRepository transactionRepository;
+    private final DhanOrderService dhanOrderService;
+    private final DhanFundLimitService dhanFundLimitService;
+
+    private volatile WebSocketSession session;
+
+    // =========================================================
+    // GLOBAL CACHE
+    // =========================================================
+
+    private final Map<Integer, OptionRsi> latestRsi =
+            new ConcurrentHashMap<>();
+
+    //private static final int FUTURE_ID = 66691;
+
+    // =========================================================
+    // DEDICATED EXPIRY CORES
+    // =========================================================
+
+    private final Scheduler currentExpiryScheduler =
+            Schedulers.newSingle("CURRENT-EXPIRY");
+
+    private final Scheduler nextExpiryScheduler =
+            Schedulers.newSingle("NEXT-EXPIRY");
+    
+    private final Scheduler nextExpiryScheduler1 =
+            Schedulers.newSingle("NEXT-EXPIRY-1");
+    
+    private final Scheduler nextExpiryScheduler2 =
+            Schedulers.newSingle("NEXT-EXPIRY-2");
+    
+    private final Scheduler nextExpiryScheduler3 =
+            Schedulers.newSingle("NEXT-EXPIRY-3");
+    
+    private final Scheduler nextExpiryScheduler4 =
+            Schedulers.newSingle("NEXT-EXPIRY-4");
+
+    private final Scheduler farExpiryScheduler =
+            Schedulers.newSingle("FAR-EXPIRY");
+
+    // =========================================================
+
+    @Value("${dhan.client-id}")
+    private String clientId;
+
+    @Value("${dhan.access-token}")
+    private String accessToken;
+
+    public DhanLiveDataHandler(
+            CandleRsiService rsiService,
+            DhanSubscriptionStore store,
+            DpiAggregatorService aggregator,
+            FlowSignalService signalService,
+            OptionRsiRepository rsiRepository,
+            DhanOrderService dhanOrderService,
+            OptionTransactionRepository transactionRepository,
+            DhanFundLimitService dhanFundLimitService
+    ) {
+
+        this.rsiService = rsiService;
+        this.store = store;
+        this.aggregator = aggregator;
+        this.signalService = signalService;
+        this.rsiRepository = rsiRepository;
+        this.transactionRepository = transactionRepository;
+        this.dhanOrderService = dhanOrderService;
+        this.dhanFundLimitService = dhanFundLimitService;
+    }
+
+    // =========================================================
+    // HANDLE
+    // =========================================================
+
+    @Override
+    public Mono<Void> handle(WebSocketSession session) {
+
+        this.session = session;
+
+        Mono<Void> resubscribe = sendAllSubscriptions();
+
+        // =====================================================
+        // RAW TICKS
+        // =====================================================
+
+        Flux<Tick> ticks = session.receive()
+
+                .filter(m ->
+                        m.getType() ==
+                        WebSocketMessage.Type.BINARY
+                )
+
+                .mapNotNull(m ->
+                        decode(m.getPayload())
+                )
+
+                .filter(t ->
+                        t.oi() >= 1000 &&
+                        t.ltp() >= 0.80
+                )
+
+                .onBackpressureBuffer(
+                        50000,
+                        BufferOverflowStrategy.DROP_OLDEST
+                )
+
+                .share();
+
+        // =====================================================
+        // SPLIT BY EXPIRY
+        // =====================================================
+
+        Flux<GroupedFlux<LocalDate, Tick>> grouped =
+                ticks.groupBy(Tick::expiry);
+
+        // =====================================================
+        // PARALLEL EXPIRY PROCESSING
+        // =====================================================
+
+        Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
+
+            LocalDate expiry = group.key();
+
+            Scheduler scheduler =
+                    resolveScheduler(expiry);
+
+            log.info(
+                    "✅ Expiry {} mapped to {}",
+                    expiry,
+                    scheduler
+            );
+
+            return group
+
+                    // -----------------------------------------
+                    // DEDICATED CORE
+                    // -----------------------------------------
+
+                    .publishOn(scheduler)
+
+                    // -----------------------------------------
+                    // STRICT ORDER INSIDE EXPIRY
+                    // -----------------------------------------
+
+                    .concatMap(t ->
+
+                            Mono.fromCallable(() -> {
+
+                                // ============================
+                                // 4 SECOND GAMMA
+                                // ============================
+
+                                rsiService.onLtp(
+                                        "NIFTY",
+                                        t.securityId(),
+                                        t.optionType(),
+                                        t.ltp(),
+                                        t.oi(),
+                                        t.highestOi(),
+                                        t.atp(),
+                                        4
+                                );
+
+                                // ============================
+                                // 5 SECOND RSI
+                                // ============================
+
+                                return rsiService.onLtp(
+                                        "NIFTY",
+                                        t.securityId(),
+                                        t.optionType(),
+                                        t.ltp(),
+                                        t.oi(),
+                                        t.highestOi(),
+                                        t.atp(),
+                                        5
+                                );
+                            })
+
+                    )
+
+                    .filter(Objects::nonNull)
+
+                    // -----------------------------------------
+                    // GLOBAL FLOW
+                    // ALL EXPIRIES
+                    // -----------------------------------------
+
+                    .doOnNext(rsi -> {
+
+                        latestRsi.put(
+                                rsi.getSecurityId(),
+                                rsi
+                        );
+
+                        aggregator.add(rsi, 5);
+                    })
+
+                    .doOnError(err ->
+                            log.error(
+                                    "❌ RSI ERROR",
+                                    err
+                            )
+                    );
+
+        }).publish().refCount(1);
+
+        // =====================================================
+        // FINAL DECISION
+        // CURRENT EXPIRY ONLY
+        // =====================================================
+
+        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+
+                .filter(rsi ->
+                        store.isCurrentExpiry(
+                                rsi.getExpiry()
+                        )
+                );
+
+        Mono<Void> finalDecision = currentExpiryFlux
+
+                .bufferUntilChanged(
+                        OptionRsi::getCandleTime
+                )
+
+                // STRICT ORDER
+                .concatMap(this::processBatch)
+
+                .then();
+
+        // =====================================================
+        // HEARTBEAT
+        // =====================================================
+
+        Mono<Void> heartbeat = session.send(
+
+                Flux.interval(Duration.ofSeconds(15))
+
+                        .map(i ->
+                                session.pingMessage(
+                                        f -> f.allocateBuffer(0)
+                                )
+                        )
+        );
+
+        // =====================================================
+        // FINAL PIPELINE
+        // =====================================================
+
+        return resubscribe.then(
+
+                        Mono.when(
+                                rsiFlux.then(),
+                                finalDecision,
+                                heartbeat
+                        )
+                )
+
+                .takeUntilOther(
+                        session.closeStatus()
+                )
+
+                .doFinally(s ->
+                        this.session = null
+                );
+    }
+
+    // =========================================================
+    // PROCESS BATCH
+    // ONLY CURRENT EXPIRY
+    // =========================================================
+
+    private Mono<Void> processBatch(List<OptionRsi> batch) {
+
+        return Mono.fromCallable(() -> {
+
+            if (batch.isEmpty()) {
+                return null;
+            }
+
+            // =================================================
+            // GLOBAL FLOW SNAPSHOT
+            // CURRENT + NEXT + FAR
+            // =================================================
+
+            var snap = aggregator.snapshot(5);
+
+            double callFlow = snap.callDpi();
+            double putFlow  = snap.putDpi();
+            double netFlow  = snap.netDpi();
+
+            // =================================================
+            // FETCH TXN
+            // =================================================
+
+            OptionTransaction callTxn =
+                    transactionRepository
+                            .findByTimeframeAndOptionTypeAndActive(
+                                    "5S",
+                                    "CALL",
+                                    true
+                            )
+                            .orElseGet(() ->
+                                    transactionRepository.save(
+                                            newTxn(
+                                                    "NIFTY",
+                                                    41758,
+                                                    "CALL"
+                                            )
+                                    )
+                            );
+
+            OptionTransaction putTxn =
+                    transactionRepository
+                            .findByTimeframeAndOptionTypeAndActive(
+                                    "5S",
+                                    "PUT",
+                                    true
+                            )
+                            .orElseGet(() ->
+                                    transactionRepository.save(
+                                            newTxn(
+                                                    "NIFTY",
+                                                    41759,
+                                                    "PUT"
+                                            )
+                                    )
+                            );
+
+            // =================================================
+            // CURRENT EXPIRY RSI ONLY
+            // =================================================
+
+            OptionRsi call = batch.stream()
+
+                    .filter(r ->
+                            r.getSecurityId() ==
+                            callTxn.getSecurityId()
+                    )
+
+                    .findFirst()
+
+                    .orElse(null);
+
+            OptionRsi put = batch.stream()
+
+                    .filter(r ->
+                            r.getSecurityId() ==
+                            putTxn.getSecurityId()
+                    )
+
+                    .findFirst()
+
+                    .orElse(null);
+
+            if (call == null || put == null) {
+
+                log.warn(
+                        "⚠ Missing RSI CALL={} PUT={}",
+                        callTxn.getSecurityId(),
+                        putTxn.getSecurityId()
+                );
+
+                return null;
+            }
+
+            OptionRsi callSave = new OptionRsi(call);
+            OptionRsi putSave  = new OptionRsi(put);
+
+            // =================================================
+            // APPLY GLOBAL FLOW
+            // =================================================
+
+            callSave.setCallFlow(callFlow);
+            callSave.setPutFlow(putFlow);
+            callSave.setNetFlow(netFlow);
+
+            putSave.setCallFlow(callFlow);
+            putSave.setPutFlow(putFlow);
+            putSave.setNetFlow(netFlow);
+
+            // =================================================
+            // BUY LOGIC
+            // =================================================
+
+            Optional<OptionRsi> maxCall =
+                    latestRsi.values().stream()
+
+                            .filter(r ->
+                                    "CALL".equalsIgnoreCase(
+                                            r.getOptionType()
+                                    )
+                            )
+
+                            .max(
+                                    Comparator.comparing(
+                                            OptionRsi::getOi
+                                    )
+                            );
+
+            Optional<OptionRsi> maxPut =
+                    latestRsi.values().stream()
+
+                            .filter(r ->
+                                    "PUT".equalsIgnoreCase(
+                                            r.getOptionType()
+                                    )
+                            )
+
+                            .max(
+                                    Comparator.comparing(
+                                            OptionRsi::getOi
+                                    )
+                            );
+
+            boolean callBuy =
+                    maxPut.map(r ->
+                            r.getClose() <= 5
+                    ).orElse(false);
+
+            boolean putBuy =
+                    maxCall.map(r ->
+                            r.getClose() <= 5
+                    ).orElse(false);
+
+            // =================================================
+            // SIGNAL
+            // =================================================
+
+            FlowSignal callSignal =
+                    signalService.evaluate(
+                            snap,
+                            "CALL",
+                            callBuy,
+                            putBuy
+                    );
+
+            FlowSignal putSignal =
+                    signalService.evaluate(
+                            snap,
+                            "PUT",
+                            callBuy,
+                            putBuy
+                    );
+
+            // =================================================
+            // APPLY SIGNAL
+            // =================================================
+
+            executeCallSignal(
+                    callSignal,
+                    callSave,
+                    Optional.of(callTxn)
+            );
+
+            executePutSignal(
+                    putSignal,
+                    putSave,
+                    Optional.of(putTxn)
+            );
+
+            // =================================================
+            // UPDATE TXN
+            // =================================================
+
+            updateCallTransaction(
+                    callTxn,
+                    callSignal
+            );
+
+            updatePutTransaction(
+                    putTxn,
+                    putSignal
+            );
+
+            // =================================================
+            // SAVE
+            // =================================================
+
+            rsiRepository.saveAll(
+                    List.of(
+                            callSave,
+                            putSave
+                    )
+            );
+
+            return null;
+
+        }).subscribeOn(
+                Schedulers.boundedElastic()
+        ).then();
+    }
+
+    // =========================================================
+    // SCHEDULER RESOLUTION
+    // =========================================================
+
+    private Scheduler resolveScheduler(LocalDate expiry) {
+
+        List<LocalDate> expiries =
+                store.allExpiriesSorted();
+
+        if (expiries.isEmpty()) {
+            return currentExpiryScheduler;
+        }
+
+        // CURRENT
+        if (expiry.equals(expiries.get(0))) {
+            return currentExpiryScheduler;
+        }
+
+        // NEXT
+        if (expiries.size() > 1 &&
+            expiry.equals(expiries.get(1))) {
+
+            return nextExpiryScheduler;
+        }
+
+        // NEXT-EXPIRY-1
+        if (expiries.size() > 2 &&
+            expiry.equals(expiries.get(2))) {
+
+            return nextExpiryScheduler1;
+        }
+        
+        // NEXT-EXPIRY-2
+        if (expiries.size() > 3 &&
+            expiry.equals(expiries.get(3))) {
+
+            return nextExpiryScheduler2;
+        }
+        
+        // NEXT-EXPIRY-3
+        if (expiries.size() > 4 &&
+            expiry.equals(expiries.get(4))) {
+
+            return nextExpiryScheduler3;
+        }
+        
+        // NEXT-EXPIRY-4
+        if (expiries.size() > 5 &&
+            expiry.equals(expiries.get(5))) {
+
+            return nextExpiryScheduler4;
+        }
+        
+        // FAR
+        return farExpiryScheduler;
+    }
+
+    // =========================================================
+    // TXN
+    // =========================================================
+
+    private OptionTransaction newTxn(
+            String symbol,
+            int securityId,
+            String optionType
+    ) {
+
+        return OptionTransaction.builder()
+
+                .symbol(symbol)
+
+                .securityId(securityId)
+
+                .optionType(optionType)
+
+                .timeframe("5S")
+
+                .position(0)
+
+                .active(true)
+
+                .sold(false)
+
+                .createdAt(LocalDateTime.now())
+
+                .updatedAt(LocalDateTime.now())
+
+                .build();
+    }
+
+    private void updateCallTransaction(
+            OptionTransaction txn,
+            FlowSignal signal
+    ) {
+
+        switch (signal) {
+
+            case BUY_CALL -> {
+
+                txn.setPosition(1);
+
+                txn.setUpdatedAt(
+                        LocalDateTime.now()
+                );
+            }
+
+            case SELL_CALL -> {
+
+                txn.setActive(false);
+            }
+
+            default -> {
+            }
+        }
+
+        transactionRepository.save(txn);
+    }
+
+    private void updatePutTransaction(
+            OptionTransaction txn,
+            FlowSignal signal
+    ) {
+
+        switch (signal) {
+
+            case BUY_PUT -> {
+
+                txn.setPosition(1);
+
+                txn.setUpdatedAt(
+                        LocalDateTime.now()
+                );
+            }
+
+            case SELL_PUT -> {
+
+                txn.setActive(false);
+            }
+
+            default -> {
+            }
+        }
+
+        transactionRepository.save(txn);
+    }
+
+    // =========================================================
+    // SIGNAL EXECUTION
+    // =========================================================
+
+    private void executeCallSignal(
+            FlowSignal signal,
+            OptionRsi callSave,
+            Optional<OptionTransaction> callOptFinal
+    ) {
+
+        switch (signal) {
+
+            case BUY_CALL ->
+                    callSave.setBuy(true);
+
+            case SELL_CALL ->
+                    callSave.setSell(true);
+
+            default -> {
+            }
+        }
+    }
+
+    private void executePutSignal(
+            FlowSignal signal,
+            OptionRsi putSave,
+            Optional<OptionTransaction> putOptFinal
+    ) {
+
+        switch (signal) {
+
+            case BUY_PUT ->
+                    putSave.setBuy(true);
+
+            case SELL_PUT ->
+                    putSave.setSell(true);
+
+            default -> {
+            }
+        }
+    }
+
+    // =========================================================
+    // ORDER
+    // =========================================================
+
+    private DhanOrderRequest buildRequest(
+            String type,
+            OptionRsi rsi
+    ) {
+
+        DhanOrderRequest request =
+                DhanOrderRequest.builder()
+
+                        .dhanClientId(clientId)
+
+                        .correlationId(
+                                CorrelationIdGenerator.generate(
+                                        "NIFTY"
+                                )
+                        )
+
+                        .transactionType(type)
+
+                        .exchangeSegment("NSE_FNO")
+
+                        .productType("INTRADAY")
+
+                        .orderType("MARKET")
+
+                        .validity("DAY")
+
+                        .securityId(
+                                String.valueOf(
+                                        rsi.getSecurityId()
+                                )
+                        )
+
+                        .quantity(65)
+
+                        .price(0)
+
+                        .triggerPrice(0)
+
+                        .afterMarketOrder(false)
+
+                        .build();
+
+        try {
+
+            ObjectMapper mapper =
+                    new ObjectMapper();
+
+            log.info(
+                    "DHAN ORDER REQUEST => {}",
+                    mapper.writeValueAsString(
+                            request
+                    )
+            );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "Serialization error",
+                    e
+            );
+        }
+
+        return request;
+    }
+
+    // =========================================================
+    // DECODE
+    // =========================================================
+
+    private Tick decode(DataBuffer buffer) {
+
+        byte[] bytes =
+                new byte[
+                        buffer.readableByteCount()
+                ];
+
+        buffer.read(bytes);
+
+        ByteBuffer bb =
+                ByteBuffer.wrap(bytes)
+                        .order(ByteOrder.LITTLE_ENDIAN);
+
+        if (bb.remaining() < 43) {
+            return null;
+        }
+
+        bb.getShort();
+        bb.getShort();
+
+        int securityId = bb.getInt();
+
+        float ltp = bb.getFloat();
+
+        bb.getShort();
+        bb.getInt();
+
+        float atp = bb.getFloat();
+
+        bb.getInt();
+        bb.getInt();
+        bb.getInt();
+
+        int oi = bb.getInt();
+
+        int highestOi = bb.getInt();
+
+        DhanSubscription sub =
+                store.subscription(securityId);
+
+        if (sub == null) {
+            return null;
+        }
+
+        return new Tick(
+
+                securityId,
+
+                ltp,
+
+                oi,
+
+                highestOi,
+
+                atp,
+
+                sub.getOptionType(),
+
+                sub.getExpiryDate()
+        );
+    }
+
+    // =========================================================
+    // SUBSCRIBE
+    // =========================================================
+
+    public Mono<Void> subscribe(
+            String exchange,
+            String securityId,
+            String optionType,
+            Integer strike,
+            LocalDate expiry
+    ) {
+
+        store.add(
+                exchange,
+                securityId,
+                optionType,
+                strike,
+                expiry
+        );
+
+        if (session == null || !session.isOpen()) {
+            return Mono.empty();
+        }
+
+        return sendSubscription(
+                exchange,
+                securityId
+        );
+    }
+
+    private Mono<Void> sendAllSubscriptions() {
+
+        return Flux.fromIterable(store.all())
+
+                .flatMap(s ->
+                        sendSubscription(
+                                s.getExchange(),
+                                s.getSecurityId()
+                        )
+                )
+
+                .then();
+    }
+
+    private Mono<Void> sendSubscription(
+            String exchange,
+            String securityId
+    ) {
+
+        String payload = """
+                {
+                  "RequestCode": 21,
+                  "InstrumentCount": 1,
+                  "InstrumentList": [
+                    {
+                      "ExchangeSegment": "%s",
+                      "SecurityId": "%s"
+                    }
+                  ]
+                }
+                """.formatted(exchange, securityId);
+
+        return session.send(
+                Mono.just(
+                        session.textMessage(payload)
+                )
+        );
+    }
 }
