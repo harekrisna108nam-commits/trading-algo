@@ -5,9 +5,11 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.dhan_rsi_series.entity.DhanSubscription;
 
@@ -160,4 +162,9 @@ public interface DhanSubscriptionRepository
             LocalDate expiry,
             String optionType
     );
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM DhanSubscription d WHERE d.expiryDate < :today")
+    int deleteExpiredRecords(LocalDate today);
 }
