@@ -23,7 +23,6 @@ import com.example.dhan_rsi_series.entity.DhanSubscription;
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
-import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
@@ -32,14 +31,12 @@ import com.example.dhan_rsi_series.service.DhanFundLimitService;
 import com.example.dhan_rsi_series.service.DhanOrderService;
 
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.Disposable;
 import reactor.core.publisher.BufferOverflowStrategy;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.GroupedFlux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import tools.jackson.databind.ObjectMapper;
 
 //@Slf4j
 //@Component
@@ -1056,110 +1053,347 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	}
 }*/
 
-
-@Slf4j
-@Component
-public class DhanLiveDataHandler implements WebSocketHandler {
-
-    private final CandleRsiService rsiService;
-    private final DhanSubscriptionStore store;
-    private final DpiAggregatorService aggregator;
-    private final FlowSignalService signalService;
-    private final OptionRsiRepository rsiRepository;
-    private final OptionTransactionRepository transactionRepository;
-    private final DhanOrderService dhanOrderService;
-    private final DhanFundLimitService dhanFundLimitService;
-
-    private volatile WebSocketSession session;
-
-    // =========================================================
-    // GLOBAL CACHE
-    // =========================================================
-
-    private final Map<Integer, OptionRsi> latestRsi =
-            new ConcurrentHashMap<>();
-
-    //private static final int FUTURE_ID = 66691;
-
-    // =========================================================
-    // DEDICATED EXPIRY CORES
-    // =========================================================
-
-    private final Scheduler currentExpiryScheduler =
-            Schedulers.newSingle("CURRENT-EXPIRY");
-
-    private final Scheduler nextExpiryScheduler =
-            Schedulers.newSingle("NEXT-EXPIRY");
-    
-    private final Scheduler nextExpiryScheduler1 =
-            Schedulers.newSingle("NEXT-EXPIRY-1");
-    
-    private final Scheduler nextExpiryScheduler2 =
-            Schedulers.newSingle("NEXT-EXPIRY-2");
-    
-    private final Scheduler nextExpiryScheduler3 =
-            Schedulers.newSingle("NEXT-EXPIRY-3");
-    
-    private final Scheduler nextExpiryScheduler4 =
-            Schedulers.newSingle("NEXT-EXPIRY-4");
-
-    private final Scheduler farExpiryScheduler =
-            Schedulers.newSingle("FAR-EXPIRY");
-
-    // =========================================================
-
-    @Value("${dhan.client-id}")
-    private String clientId;
-
-    @Value("${dhan.access-token}")
-    private String accessToken;
-
-    public DhanLiveDataHandler(
-            CandleRsiService rsiService,
-            DhanSubscriptionStore store,
-            DpiAggregatorService aggregator,
-            FlowSignalService signalService,
-            OptionRsiRepository rsiRepository,
-            DhanOrderService dhanOrderService,
-            OptionTransactionRepository transactionRepository,
-            DhanFundLimitService dhanFundLimitService
-    ) {
-
-        this.rsiService = rsiService;
-        this.store = store;
-        this.aggregator = aggregator;
-        this.signalService = signalService;
-        this.rsiRepository = rsiRepository;
-        this.transactionRepository = transactionRepository;
-        this.dhanOrderService = dhanOrderService;
-        this.dhanFundLimitService = dhanFundLimitService;
-    }
-
-    // =========================================================
-    // HANDLE
-    // =========================================================
-
+//@Slf4j
+//@Component
+//public class DhanLiveDataHandler implements WebSocketHandler {
+//
+//    private final CandleRsiService rsiService;
+//    private final DhanSubscriptionStore store;
+//    private final DpiAggregatorService aggregator;
+//    private final FlowSignalService signalService;
+//    private final OptionRsiRepository rsiRepository;
+//    private final OptionTransactionRepository transactionRepository;
+//    private final DhanOrderService dhanOrderService;
+//    private final DhanFundLimitService dhanFundLimitService;
+//
+//    private volatile WebSocketSession session;
+//
+//    // =========================================================
+//    // GLOBAL CACHE
+//    // =========================================================
+//
+//    private final Map<Integer, OptionRsi> latestRsi =
+//            new ConcurrentHashMap<>();
+//
+//    //private static final int FUTURE_ID = 66691;
+//
+//    // =========================================================
+//    // DEDICATED EXPIRY CORES
+//    // =========================================================
+//
+//    private final Scheduler currentExpiryScheduler =
+//            Schedulers.newSingle("CURRENT-EXPIRY");
+//
+//    private final Scheduler nextExpiryScheduler =
+//            Schedulers.newSingle("NEXT-EXPIRY");
+//    
+//    private final Scheduler nextExpiryScheduler1 =
+//            Schedulers.newSingle("NEXT-EXPIRY-1");
+//    
+//    private final Scheduler nextExpiryScheduler2 =
+//            Schedulers.newSingle("NEXT-EXPIRY-2");
+//    
+//    private final Scheduler nextExpiryScheduler3 =
+//            Schedulers.newSingle("NEXT-EXPIRY-3");
+//    
+//    private final Scheduler nextExpiryScheduler4 =
+//            Schedulers.newSingle("NEXT-EXPIRY-4");
+//
+//    private final Scheduler farExpiryScheduler =
+//            Schedulers.newSingle("FAR-EXPIRY");
+//
+//    // =========================================================
+//
+//    @Value("${dhan.client-id}")
+//    private String clientId;
+//
+//    @Value("${dhan.access-token}")
+//    private String accessToken;
+//
+//    public DhanLiveDataHandler(
+//            CandleRsiService rsiService,
+//            DhanSubscriptionStore store,
+//            DpiAggregatorService aggregator,
+//            FlowSignalService signalService,
+//            OptionRsiRepository rsiRepository,
+//            DhanOrderService dhanOrderService,
+//            OptionTransactionRepository transactionRepository,
+//            DhanFundLimitService dhanFundLimitService
+//    ) {
+//
+//        this.rsiService = rsiService;
+//        this.store = store;
+//        this.aggregator = aggregator;
+//        this.signalService = signalService;
+//        this.rsiRepository = rsiRepository;
+//        this.transactionRepository = transactionRepository;
+//        this.dhanOrderService = dhanOrderService;
+//        this.dhanFundLimitService = dhanFundLimitService;
+//    }
+//
+//    // =========================================================
+//    // HANDLE
+//    // =========================================================
+//
+////    @Override
+////    public Mono<Void> handle(WebSocketSession session) {
+////
+////        this.session = session;
+////
+////        Mono<Void> resubscribe = sendAllSubscriptions();
+////
+////        // =====================================================
+////        // RAW TICKS
+////        // =====================================================
+////
+////        Flux<Tick> ticks = session.receive()
+////
+////                .filter(m ->
+////                        m.getType() ==
+////                        WebSocketMessage.Type.BINARY
+////                )
+////
+////                .mapNotNull(m ->
+////                        decode(m.getPayload())
+////                )
+////
+////                .filter(t ->
+////                        t.oi() >= 1000 &&
+////                        t.ltp() >= 0.80
+////                )
+////
+////                .onBackpressureBuffer(
+////                        50000,
+////                        BufferOverflowStrategy.DROP_OLDEST
+////                )
+////
+////                .share();
+////
+////        // =====================================================
+////        // SPLIT BY EXPIRY
+////        // =====================================================
+////
+////        Flux<GroupedFlux<LocalDate, Tick>> grouped =
+////                ticks.groupBy(Tick::expiry);
+////
+////        // =====================================================
+////        // PARALLEL EXPIRY PROCESSING
+////        // =====================================================
+////
+////        Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
+////
+////            LocalDate expiry = group.key();
+////
+////            Scheduler scheduler =
+////                    resolveScheduler(expiry);
+////
+////            log.info(
+////                    "✅ Expiry {} mapped to {}",
+////                    expiry,
+////                    scheduler
+////            );
+////
+////            return group
+////
+////                    // -----------------------------------------
+////                    // DEDICATED CORE
+////                    // -----------------------------------------
+////
+////                    .publishOn(scheduler)
+////
+////                    // -----------------------------------------
+////                    // STRICT ORDER INSIDE EXPIRY
+////                    // -----------------------------------------
+////
+////                    .concatMap(t ->
+////
+////                            Mono.fromCallable(() -> {
+////
+////                                // ============================
+////                                // 4 SECOND GAMMA
+////                                // ============================
+////
+////                                rsiService.onLtp(
+////                                        "NIFTY",
+////                                        t.securityId(),
+////                                        t.optionType(),
+////                                        t.ltp(),
+////                                        t.oi(),
+////                                        t.highestOi(),
+////                                        t.atp(),
+////                                        4
+////                                );
+////
+////                                // ============================
+////                                // 5 SECOND RSI
+////                                // ============================
+////
+////                                return rsiService.onLtp(
+////                                        "NIFTY",
+////                                        t.securityId(),
+////                                        t.optionType(),
+////                                        t.ltp(),
+////                                        t.oi(),
+////                                        t.highestOi(),
+////                                        t.atp(),
+////                                        5
+////                                );
+////                            })
+////
+////                    )
+////
+////                    .filter(Objects::nonNull)
+////
+////                    // -----------------------------------------
+////                    // GLOBAL FLOW
+////                    // ALL EXPIRIES
+////                    // -----------------------------------------
+////
+////                    .doOnNext(rsi -> {
+////
+////                        latestRsi.put(
+////                                rsi.getSecurityId(),
+////                                rsi
+////                        );
+////
+////                        aggregator.add(rsi, 5);
+////                    })
+////
+////                    .doOnError(err ->
+////                            log.error(
+////                                    "❌ RSI ERROR",
+////                                    err
+////                            )
+////                    );
+////
+////        }).publish().refCount(1);
+////
+////        // =====================================================
+////        // FINAL DECISION
+////        // CURRENT EXPIRY ONLY
+////        // =====================================================
+////
+////        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+////
+////                .filter(rsi ->
+////                        store.isCurrentExpiry(
+////                                rsi.getExpiry()
+////                        )
+////                );
+////
+////        Mono<Void> finalDecision = currentExpiryFlux
+////
+////                .bufferUntilChanged(
+////                        OptionRsi::getCandleTime
+////                )
+////
+////                // STRICT ORDER
+////                .concatMap(this::processBatch)
+////
+////                .then();
+////
+////        // =====================================================
+////        // HEARTBEAT
+////        // =====================================================
+////
+////        Mono<Void> heartbeat = session.send(
+////
+////                Flux.interval(Duration.ofSeconds(15))
+////
+////                        .map(i ->
+////                                session.pingMessage(
+////                                        f -> f.allocateBuffer(0)
+////                                )
+////                        )
+////        );
+////
+////        // =====================================================
+////        // FINAL PIPELINE
+////        // =====================================================
+////
+////        return resubscribe.then(
+////
+////                        Mono.when(
+////                                rsiFlux.then(),
+////                                finalDecision,
+////                                heartbeat
+////                        )
+////                )
+////
+////                .takeUntilOther(
+////                        session.closeStatus()
+////                )
+////
+////                .doFinally(s ->
+////                        this.session = null
+////                );
+////    }
+//    
 //    @Override
 //    public Mono<Void> handle(WebSocketSession session) {
 //
 //        this.session = session;
 //
-//        Mono<Void> resubscribe = sendAllSubscriptions();
+//        log.info("🟢 WebSocket connected");
 //
 //        // =====================================================
-//        // RAW TICKS
+//        // HEARTBEAT
+//        // =====================================================
+//
+//        Flux<WebSocketMessage> heartbeatFlux =
+//
+//                Flux.interval(Duration.ofSeconds(15))
+//
+//                        .map(i -> {
+//
+//                            log.debug("💓 Sending Ping");
+//
+//                            return session.pingMessage(
+//                                    factory -> factory.allocateBuffer(0)
+//                            );
+//                        });
+//
+//        // =====================================================
+//        // RECEIVE TICKS
 //        // =====================================================
 //
 //        Flux<Tick> ticks = session.receive()
 //
-//                .filter(m ->
-//                        m.getType() ==
+//                .doOnSubscribe(s ->
+//                        log.info("📡 Listening ticks...")
+//                )
+//
+//                .doOnNext(msg ->
+//                        log.debug("📩 WS Message Type: {}", msg.getType())
+//                )
+//
+//                .doOnError(err ->
+//                        log.error("❌ WebSocket receive error", err)
+//                )
+//
+//                .doOnComplete(() ->
+//                        log.warn("🔌 WebSocket disconnected")
+//                )
+//
+//                .filter(msg ->
+//                        msg.getType() ==
 //                        WebSocketMessage.Type.BINARY
 //                )
 //
-//                .mapNotNull(m ->
-//                        decode(m.getPayload())
-//                )
+//                .mapNotNull(msg -> {
+//
+//                    try {
+//                        return decode(msg.getPayload());
+//
+//                    } catch (Exception e) {
+//
+//                        log.error("❌ Decode error", e);
+//
+//                        return null;
+//                    }
+//                })
+//
+//                .filter(Objects::nonNull)
 //
 //                .filter(t ->
 //                        t.oi() >= 1000 &&
@@ -1168,20 +1402,22 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 //
 //                .onBackpressureBuffer(
 //                        50000,
+//                        dropped ->
+//                                log.warn("⚠ Tick dropped"),
 //                        BufferOverflowStrategy.DROP_OLDEST
 //                )
 //
 //                .share();
 //
 //        // =====================================================
-//        // SPLIT BY EXPIRY
+//        // GROUP BY EXPIRY
 //        // =====================================================
 //
 //        Flux<GroupedFlux<LocalDate, Tick>> grouped =
 //                ticks.groupBy(Tick::expiry);
 //
 //        // =====================================================
-//        // PARALLEL EXPIRY PROCESSING
+//        // RSI PIPELINE
 //        // =====================================================
 //
 //        Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
@@ -1199,24 +1435,13 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 //
 //            return group
 //
-//                    // -----------------------------------------
-//                    // DEDICATED CORE
-//                    // -----------------------------------------
-//
 //                    .publishOn(scheduler)
-//
-//                    // -----------------------------------------
-//                    // STRICT ORDER INSIDE EXPIRY
-//                    // -----------------------------------------
 //
 //                    .concatMap(t ->
 //
 //                            Mono.fromCallable(() -> {
 //
-//                                // ============================
-//                                // 4 SECOND GAMMA
-//                                // ============================
-//
+//                                // 4 SEC
 //                                rsiService.onLtp(
 //                                        "NIFTY",
 //                                        t.securityId(),
@@ -1228,10 +1453,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 //                                        4
 //                                );
 //
-//                                // ============================
-//                                // 5 SECOND RSI
-//                                // ============================
-//
+//                                // 5 SEC
 //                                return rsiService.onLtp(
 //                                        "NIFTY",
 //                                        t.securityId(),
@@ -1242,16 +1464,11 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 //                                        t.atp(),
 //                                        5
 //                                );
-//                            })
 //
+//                            }).subscribeOn(scheduler)
 //                    )
 //
 //                    .filter(Objects::nonNull)
-//
-//                    // -----------------------------------------
-//                    // GLOBAL FLOW
-//                    // ALL EXPIRIES
-//                    // -----------------------------------------
 //
 //                    .doOnNext(rsi -> {
 //
@@ -1265,1700 +1482,1245 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 //
 //                    .doOnError(err ->
 //                            log.error(
-//                                    "❌ RSI ERROR",
+//                                    "❌ RSI Processing Error",
 //                                    err
 //                            )
 //                    );
 //
-//        }).publish().refCount(1);
+//        });
 //
 //        // =====================================================
 //        // FINAL DECISION
-//        // CURRENT EXPIRY ONLY
 //        // =====================================================
 //
-//        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+//        Mono<Void> finalDecision = rsiFlux
 //
 //                .filter(rsi ->
 //                        store.isCurrentExpiry(
 //                                rsi.getExpiry()
 //                        )
-//                );
+//                )
 //
-//        Mono<Void> finalDecision = currentExpiryFlux
+//                .doOnNext(rsi ->
+//                        log.info(
+//                                "🔥 FINAL RSI {} {}",
+//                                rsi.getSecurityId(),
+//                                rsi.getClose()
+//                        )
+//                )
 //
 //                .bufferUntilChanged(
 //                        OptionRsi::getCandleTime
 //                )
 //
-//                // STRICT ORDER
 //                .concatMap(this::processBatch)
 //
 //                .then();
 //
 //        // =====================================================
-//        // HEARTBEAT
+//        // RESUBSCRIBE
 //        // =====================================================
 //
-//        Mono<Void> heartbeat = session.send(
+//        Mono<Void> subscribeMono = sendAllSubscriptions()
 //
-//                Flux.interval(Duration.ofSeconds(15))
-//
-//                        .map(i ->
-//                                session.pingMessage(
-//                                        f -> f.allocateBuffer(0)
-//                                )
-//                        )
-//        );
+//                .doOnSuccess(v ->
+//                        log.info("✅ All subscriptions restored")
+//                );
 //
 //        // =====================================================
-//        // FINAL PIPELINE
+//        // SEND HEARTBEAT
 //        // =====================================================
 //
-//        return resubscribe.then(
+//        Mono<Void> heartbeatMono =
+//                session.send(heartbeatFlux);
+//
+//        // =====================================================
+//        // FINAL
+//        // =====================================================
+//
+//        return subscribeMono.then(
 //
 //                        Mono.when(
-//                                rsiFlux.then(),
+//
 //                                finalDecision,
-//                                heartbeat
+//
+//                                heartbeatMono
 //                        )
 //                )
 //
-//                .takeUntilOther(
-//                        session.closeStatus()
+//                .doFinally(signal -> {
+//
+//                    log.warn(
+//                            "🔌 WebSocket closed {}",
+//                            signal
+//                    );
+//
+//                    this.session = null;
+//                });
+//    }
+//
+//    // =========================================================
+//    // PROCESS BATCH
+//    // ONLY CURRENT EXPIRY
+//    // =========================================================
+//
+//    private Mono<Void> processBatch(List<OptionRsi> batch) {
+//
+//        return Mono.fromCallable(() -> {
+//
+//            if (batch.isEmpty()) {
+//                return null;
+//            }
+//
+//            // =================================================
+//            // GLOBAL FLOW SNAPSHOT
+//            // CURRENT + NEXT + FAR
+//            // =================================================
+//
+//            var snap = aggregator.snapshot(5);
+//
+//            double callFlow = snap.callDpi();
+//            double putFlow  = snap.putDpi();
+//            double netFlow  = snap.netDpi();
+//
+//            // =================================================
+//            // FETCH TXN
+//            // =================================================
+//
+//            OptionTransaction callTxn =
+//                    transactionRepository
+//                            .findByTimeframeAndOptionTypeAndActive(
+//                                    "5S",
+//                                    "CALL",
+//                                    true
+//                            )
+//                            .orElseGet(() ->
+//                                    transactionRepository.save(
+//                                            newTxn(
+//                                                    "NIFTY",
+//                                                    72171,
+//                                                    "CALL"
+//                                            )
+//                                    )
+//                            );
+//
+//            OptionTransaction putTxn =
+//                    transactionRepository
+//                            .findByTimeframeAndOptionTypeAndActive(
+//                                    "5S",
+//                                    "PUT",
+//                                    true
+//                            )
+//                            .orElseGet(() ->
+//                                    transactionRepository.save(
+//                                            newTxn(
+//                                                    "NIFTY",
+//                                                    72172,
+//                                                    "PUT"
+//                                            )
+//                                    )
+//                            );
+//
+//            // =================================================
+//            // CURRENT EXPIRY RSI ONLY
+//            // =================================================
+//
+//            OptionRsi call = batch.stream()
+//
+//                    .filter(r ->
+//                            r.getSecurityId() ==
+//                            callTxn.getSecurityId()
+//                    )
+//
+//                    .findFirst()
+//
+//                    .orElse(null);
+//
+//            OptionRsi put = batch.stream()
+//
+//                    .filter(r ->
+//                            r.getSecurityId() ==
+//                            putTxn.getSecurityId()
+//                    )
+//
+//                    .findFirst()
+//
+//                    .orElse(null);
+//
+//            if (call == null || put == null) {
+//
+//                log.warn(
+//                        "⚠ Missing RSI CALL={} PUT={}",
+//                        callTxn.getSecurityId(),
+//                        putTxn.getSecurityId()
+//                );
+//
+//                return null;
+//            }
+//
+//            OptionRsi callSave = new OptionRsi(call);
+//            OptionRsi putSave  = new OptionRsi(put);
+//
+//            // =================================================
+//            // APPLY GLOBAL FLOW
+//            // =================================================
+//
+//            callSave.setCallFlow(callFlow);
+//            callSave.setPutFlow(putFlow);
+//            callSave.setNetFlow(netFlow);
+//
+//            putSave.setCallFlow(callFlow);
+//            putSave.setPutFlow(putFlow);
+//            putSave.setNetFlow(netFlow);
+//
+//            // =================================================
+//            //                     BUY LOGIC
+//            // =================================================
+//
+//            Optional<OptionRsi> maxCall =
+//                    latestRsi.values().stream()
+//
+//                            .filter(r ->
+//                                    "CALL".equalsIgnoreCase(
+//                                            r.getOptionType()
+//                                    )
+//                            )
+//
+//                            .max(
+//                                    Comparator.comparing(
+//                                            OptionRsi::getOi
+//                                    )
+//                            );
+//
+//            Optional<OptionRsi> maxPut =
+//                    latestRsi.values().stream()
+//
+//                            .filter(r ->
+//                                    "PUT".equalsIgnoreCase(
+//                                            r.getOptionType()
+//                                    )
+//                            )
+//
+//                            .max(
+//                                    Comparator.comparing(
+//                                            OptionRsi::getOi
+//                                    )
+//                            );
+//
+//            boolean callBuy =
+//                    maxPut.map(r ->
+//                            r.getClose() <= 5
+//                    ).orElse(false);
+//
+//            boolean putBuy =
+//                    maxCall.map(r ->
+//                            r.getClose() <= 5
+//                    ).orElse(false);
+//
+//            // =================================================
+//            // SIGNAL
+//            // =================================================
+//
+//            FlowSignal callSignal =
+//                    signalService.evaluate(
+//                            snap,
+//                            "CALL",
+//                            callBuy,
+//                            putBuy
+//                    );
+//
+//            FlowSignal putSignal =
+//                    signalService.evaluate(
+//                            snap,
+//                            "PUT",
+//                            callBuy,
+//                            putBuy
+//                    );
+//
+//            // =================================================
+//            // APPLY SIGNAL
+//            // =================================================
+//
+//            executeCallSignal(
+//                    callSignal,
+//                    callSave,
+//                    Optional.of(callTxn)
+//            );
+//
+//            executePutSignal(
+//                    putSignal,
+//                    putSave,
+//                    Optional.of(putTxn)
+//            );
+//
+//            // =================================================
+//            // UPDATE TXN
+//            // =================================================
+//
+//            updateCallTransaction(
+//                    callTxn,
+//                    callSignal
+//            );
+//
+//            updatePutTransaction(
+//                    putTxn,
+//                    putSignal
+//            );
+//
+//            // =================================================
+//            // SAVE
+//            // =================================================
+//
+//            rsiRepository.saveAll(
+//                    List.of(
+//                            callSave,
+//                            putSave
+//                    )
+//            );
+//
+//            return null;
+//
+//        }).subscribeOn(
+//                Schedulers.boundedElastic()
+//        ).then();
+//    }
+//
+//    // =========================================================
+//    // SCHEDULER RESOLUTION
+//    // =========================================================
+//
+//    private Scheduler resolveScheduler(LocalDate expiry) {
+//
+//        List<LocalDate> expiries =
+//                store.allExpiriesSorted();
+//
+//        if (expiries.isEmpty()) {
+//            return currentExpiryScheduler;
+//        }
+//
+//        // CURRENT
+//        if (expiry.equals(expiries.get(0))) {
+//            return currentExpiryScheduler;
+//        }
+//
+//        // NEXT
+//        if (expiries.size() > 1 &&
+//            expiry.equals(expiries.get(1))) {
+//
+//            return nextExpiryScheduler;
+//        }
+//
+//        // NEXT-EXPIRY-1
+//        if (expiries.size() > 2 &&
+//            expiry.equals(expiries.get(2))) {
+//
+//            return nextExpiryScheduler1;
+//        }
+//        
+//        // NEXT-EXPIRY-2
+//        if (expiries.size() > 3 &&
+//            expiry.equals(expiries.get(3))) {
+//
+//            return nextExpiryScheduler2;
+//        }
+//        
+//        // NEXT-EXPIRY-3
+//        if (expiries.size() > 4 &&
+//            expiry.equals(expiries.get(4))) {
+//
+//            return nextExpiryScheduler3;
+//        }
+//        
+//        // NEXT-EXPIRY-4
+//        if (expiries.size() > 5 &&
+//            expiry.equals(expiries.get(5))) {
+//
+//            return nextExpiryScheduler4;
+//        }
+//        
+//        // FAR
+//        return farExpiryScheduler;
+//    }
+//
+//    // =========================================================
+//    // TXN
+//    // =========================================================
+//
+//    private OptionTransaction newTxn(
+//            String symbol,
+//            int securityId,
+//            String optionType
+//    ) {
+//
+//        return OptionTransaction.builder()
+//
+//                .symbol(symbol)
+//
+//                .securityId(securityId)
+//
+//                .optionType(optionType)
+//
+//                .timeframe("5S")
+//
+//                .position(0)
+//
+//                .active(true)
+//
+//                .sold(false)
+//
+//                .createdAt(LocalDateTime.now())
+//
+//                .updatedAt(LocalDateTime.now())
+//
+//                .build();
+//    }
+//
+//    private void updateCallTransaction(
+//            OptionTransaction txn,
+//            FlowSignal signal
+//    ) {
+//
+//        switch (signal) {
+//
+//            case BUY_CALL -> {
+//
+//                txn.setPosition(1);
+//
+//                txn.setUpdatedAt(
+//                        LocalDateTime.now()
+//                );
+//            }
+//
+//            case SELL_CALL -> {
+//
+//                txn.setActive(false);
+//            }
+//
+//            default -> {
+//            }
+//        }
+//
+//        transactionRepository.save(txn);
+//    }
+//
+//    private void updatePutTransaction(
+//            OptionTransaction txn,
+//            FlowSignal signal
+//    ) {
+//
+//        switch (signal) {
+//
+//            case BUY_PUT -> {
+//
+//                txn.setPosition(1);
+//
+//                txn.setUpdatedAt(
+//                        LocalDateTime.now()
+//                );
+//            }
+//
+//            case SELL_PUT -> {
+//
+//                txn.setActive(false);
+//            }
+//
+//            default -> {
+//            }
+//        }
+//
+//        transactionRepository.save(txn);
+//    }
+//
+//    // =========================================================
+//    // SIGNAL EXECUTION
+//    // =========================================================
+//
+//    private void executeCallSignal(
+//            FlowSignal signal,
+//            OptionRsi callSave,
+//            Optional<OptionTransaction> callOptFinal
+//    ) {
+//
+//        switch (signal) {
+//
+//            case BUY_CALL ->
+//                    callSave.setBuy(true);
+//
+//            case SELL_CALL ->
+//                    callSave.setSell(true);
+//
+//            default -> {
+//            }
+//        }
+//    }
+//
+//    private void executePutSignal(
+//            FlowSignal signal,
+//            OptionRsi putSave,
+//            Optional<OptionTransaction> putOptFinal
+//    ) {
+//
+//        switch (signal) {
+//
+//            case BUY_PUT ->
+//                    putSave.setBuy(true);
+//
+//            case SELL_PUT ->
+//                    putSave.setSell(true);
+//
+//            default -> {
+//            }
+//        }
+//    }
+//
+//    // =========================================================
+//    // ORDER
+//    // =========================================================
+//
+//    private DhanOrderRequest buildRequest(
+//            String type,
+//            OptionRsi rsi
+//    ) {
+//
+//        DhanOrderRequest request =
+//                DhanOrderRequest.builder()
+//
+//                        .dhanClientId(clientId)
+//
+//                        .correlationId(
+//                                CorrelationIdGenerator.generate(
+//                                        "NIFTY"
+//                                )
+//                        )
+//
+//                        .transactionType(type)
+//
+//                        .exchangeSegment("NSE_FNO")
+//
+//                        .productType("INTRADAY")
+//
+//                        .orderType("MARKET")
+//
+//                        .validity("DAY")
+//
+//                        .securityId(
+//                                String.valueOf(
+//                                        rsi.getSecurityId()
+//                                )
+//                        )
+//
+//                        .quantity(65)
+//
+//                        .price(0)
+//
+//                        .triggerPrice(0)
+//
+//                        .afterMarketOrder(false)
+//
+//                        .build();
+//
+//        try {
+//
+//            ObjectMapper mapper =
+//                    new ObjectMapper();
+//
+//            log.info(
+//                    "DHAN ORDER REQUEST => {}",
+//                    mapper.writeValueAsString(
+//                            request
+//                    )
+//            );
+//
+//        } catch (Exception e) {
+//
+//            log.error(
+//                    "Serialization error",
+//                    e
+//            );
+//        }
+//
+//        return request;
+//    }
+//
+//    // =========================================================
+//    // DECODE
+//    // =========================================================
+//
+//    private Tick decode(DataBuffer buffer) {
+//
+//        byte[] bytes =
+//                new byte[
+//                        buffer.readableByteCount()
+//                ];
+//
+//        buffer.read(bytes);
+//
+//        ByteBuffer bb =
+//                ByteBuffer.wrap(bytes)
+//                        .order(ByteOrder.LITTLE_ENDIAN);
+//
+//        if (bb.remaining() < 43) {
+//            return null;
+//        }
+//
+//        bb.getShort();
+//        bb.getShort();
+//
+//        int securityId = bb.getInt();
+//
+//        float ltp = bb.getFloat();
+//
+//        bb.getShort();
+//        bb.getInt();
+//
+//        float atp = bb.getFloat();
+//
+//        bb.getInt();
+//        bb.getInt();
+//        bb.getInt();
+//
+//        int oi = bb.getInt();
+//
+//        int highestOi = bb.getInt();
+//
+//        DhanSubscription sub =
+//                store.subscription(securityId);
+//
+//        if (sub == null) {
+//            return null;
+//        }
+//
+//        return new Tick(
+//
+//                securityId,
+//
+//                ltp,
+//
+//                oi,
+//
+//                highestOi,
+//
+//                atp,
+//
+//                sub.getOptionType(),
+//
+//                sub.getExpiryDate()
+//        );
+//    }
+//
+//    // =========================================================
+//    // SUBSCRIBE
+//    // =========================================================
+//
+//    public Mono<Void> subscribe(
+//            String exchange,
+//            String securityId,
+//            String optionType,
+//            Integer strike,
+//            LocalDate expiry
+//    ) {
+//
+//        store.add(
+//                exchange,
+//                securityId,
+//                optionType,
+//                strike,
+//                expiry
+//        );
+//
+//        if (session == null || !session.isOpen()) {
+//            return Mono.empty();
+//        }
+//
+//        return sendSubscription(
+//                exchange,
+//                securityId
+//        );
+//    }
+//
+//    private Mono<Void> sendAllSubscriptions() {
+//
+//        return Flux.fromIterable(store.all())
+//
+//                .flatMap(s ->
+//                        sendSubscription(
+//                                s.getExchange(),
+//                                s.getSecurityId()
+//                        )
 //                )
 //
-//                .doFinally(s ->
-//                        this.session = null
-//                );
+//                .then();
 //    }
-    
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        this.session = session;
-
-        log.info("🟢 WebSocket connected");
-
-        // =====================================================
-        // HEARTBEAT
-        // =====================================================
-
-        Flux<WebSocketMessage> heartbeatFlux =
-
-                Flux.interval(Duration.ofSeconds(15))
-
-                        .map(i -> {
-
-                            log.debug("💓 Sending Ping");
-
-                            return session.pingMessage(
-                                    factory -> factory.allocateBuffer(0)
-                            );
-                        });
-
-        // =====================================================
-        // RECEIVE TICKS
-        // =====================================================
-
-        Flux<Tick> ticks = session.receive()
-
-                .doOnSubscribe(s ->
-                        log.info("📡 Listening ticks...")
-                )
-
-                .doOnNext(msg ->
-                        log.debug("📩 WS Message Type: {}", msg.getType())
-                )
-
-                .doOnError(err ->
-                        log.error("❌ WebSocket receive error", err)
-                )
-
-                .doOnComplete(() ->
-                        log.warn("🔌 WebSocket disconnected")
-                )
-
-                .filter(msg ->
-                        msg.getType() ==
-                        WebSocketMessage.Type.BINARY
-                )
-
-                .mapNotNull(msg -> {
-
-                    try {
-                        return decode(msg.getPayload());
-
-                    } catch (Exception e) {
-
-                        log.error("❌ Decode error", e);
-
-                        return null;
-                    }
-                })
-
-                .filter(Objects::nonNull)
-
-                .filter(t ->
-                        t.oi() >= 1000 &&
-                        t.ltp() >= 0.80
-                )
-
-                .onBackpressureBuffer(
-                        50000,
-                        dropped ->
-                                log.warn("⚠ Tick dropped"),
-                        BufferOverflowStrategy.DROP_OLDEST
-                )
-
-                .share();
-
-        // =====================================================
-        // GROUP BY EXPIRY
-        // =====================================================
-
-        Flux<GroupedFlux<LocalDate, Tick>> grouped =
-                ticks.groupBy(Tick::expiry);
-
-        // =====================================================
-        // RSI PIPELINE
-        // =====================================================
-
-        Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
-
-            LocalDate expiry = group.key();
-
-            Scheduler scheduler =
-                    resolveScheduler(expiry);
-
-            log.info(
-                    "✅ Expiry {} mapped to {}",
-                    expiry,
-                    scheduler
-            );
-
-            return group
-
-                    .publishOn(scheduler)
-
-                    .concatMap(t ->
-
-                            Mono.fromCallable(() -> {
-
-                                // 4 SEC
-                                rsiService.onLtp(
-                                        "NIFTY",
-                                        t.securityId(),
-                                        t.optionType(),
-                                        t.ltp(),
-                                        t.oi(),
-                                        t.highestOi(),
-                                        t.atp(),
-                                        4
-                                );
-
-                                // 5 SEC
-                                return rsiService.onLtp(
-                                        "NIFTY",
-                                        t.securityId(),
-                                        t.optionType(),
-                                        t.ltp(),
-                                        t.oi(),
-                                        t.highestOi(),
-                                        t.atp(),
-                                        5
-                                );
-
-                            }).subscribeOn(scheduler)
-                    )
-
-                    .filter(Objects::nonNull)
-
-                    .doOnNext(rsi -> {
-
-                        latestRsi.put(
-                                rsi.getSecurityId(),
-                                rsi
-                        );
-
-                        aggregator.add(rsi, 5);
-                    })
-
-                    .doOnError(err ->
-                            log.error(
-                                    "❌ RSI Processing Error",
-                                    err
-                            )
-                    );
-
-        });
-
-        // =====================================================
-        // FINAL DECISION
-        // =====================================================
-
-        Mono<Void> finalDecision = rsiFlux
-
-                .filter(rsi ->
-                        store.isCurrentExpiry(
-                                rsi.getExpiry()
-                        )
-                )
-
-                .doOnNext(rsi ->
-                        log.info(
-                                "🔥 FINAL RSI {} {}",
-                                rsi.getSecurityId(),
-                                rsi.getClose()
-                        )
-                )
-
-                .bufferUntilChanged(
-                        OptionRsi::getCandleTime
-                )
-
-                .concatMap(this::processBatch)
-
-                .then();
-
-        // =====================================================
-        // RESUBSCRIBE
-        // =====================================================
-
-        Mono<Void> subscribeMono = sendAllSubscriptions()
-
-                .doOnSuccess(v ->
-                        log.info("✅ All subscriptions restored")
-                );
-
-        // =====================================================
-        // SEND HEARTBEAT
-        // =====================================================
-
-        Mono<Void> heartbeatMono =
-                session.send(heartbeatFlux);
-
-        // =====================================================
-        // FINAL
-        // =====================================================
-
-        return subscribeMono.then(
-
-                        Mono.when(
-
-                                finalDecision,
-
-                                heartbeatMono
-                        )
-                )
-
-                .doFinally(signal -> {
-
-                    log.warn(
-                            "🔌 WebSocket closed {}",
-                            signal
-                    );
-
-                    this.session = null;
-                });
-    }
-
-    // =========================================================
-    // PROCESS BATCH
-    // ONLY CURRENT EXPIRY
-    // =========================================================
-
-    private Mono<Void> processBatch(List<OptionRsi> batch) {
-
-        return Mono.fromCallable(() -> {
-
-            if (batch.isEmpty()) {
-                return null;
-            }
-
-            // =================================================
-            // GLOBAL FLOW SNAPSHOT
-            // CURRENT + NEXT + FAR
-            // =================================================
-
-            var snap = aggregator.snapshot(5);
-
-            double callFlow = snap.callDpi();
-            double putFlow  = snap.putDpi();
-            double netFlow  = snap.netDpi();
-
-            // =================================================
-            // FETCH TXN
-            // =================================================
-
-            OptionTransaction callTxn =
-                    transactionRepository
-                            .findByTimeframeAndOptionTypeAndActive(
-                                    "5S",
-                                    "CALL",
-                                    true
-                            )
-                            .orElseGet(() ->
-                                    transactionRepository.save(
-                                            newTxn(
-                                                    "NIFTY",
-                                                    72171,
-                                                    "CALL"
-                                            )
-                                    )
-                            );
-
-            OptionTransaction putTxn =
-                    transactionRepository
-                            .findByTimeframeAndOptionTypeAndActive(
-                                    "5S",
-                                    "PUT",
-                                    true
-                            )
-                            .orElseGet(() ->
-                                    transactionRepository.save(
-                                            newTxn(
-                                                    "NIFTY",
-                                                    72172,
-                                                    "PUT"
-                                            )
-                                    )
-                            );
-
-            // =================================================
-            // CURRENT EXPIRY RSI ONLY
-            // =================================================
-
-            OptionRsi call = batch.stream()
-
-                    .filter(r ->
-                            r.getSecurityId() ==
-                            callTxn.getSecurityId()
-                    )
-
-                    .findFirst()
-
-                    .orElse(null);
-
-            OptionRsi put = batch.stream()
-
-                    .filter(r ->
-                            r.getSecurityId() ==
-                            putTxn.getSecurityId()
-                    )
-
-                    .findFirst()
-
-                    .orElse(null);
-
-            if (call == null || put == null) {
-
-                log.warn(
-                        "⚠ Missing RSI CALL={} PUT={}",
-                        callTxn.getSecurityId(),
-                        putTxn.getSecurityId()
-                );
-
-                return null;
-            }
-
-            OptionRsi callSave = new OptionRsi(call);
-            OptionRsi putSave  = new OptionRsi(put);
-
-            // =================================================
-            // APPLY GLOBAL FLOW
-            // =================================================
-
-            callSave.setCallFlow(callFlow);
-            callSave.setPutFlow(putFlow);
-            callSave.setNetFlow(netFlow);
-
-            putSave.setCallFlow(callFlow);
-            putSave.setPutFlow(putFlow);
-            putSave.setNetFlow(netFlow);
-
-            // =================================================
-            //                     BUY LOGIC
-            // =================================================
-
-            Optional<OptionRsi> maxCall =
-                    latestRsi.values().stream()
-
-                            .filter(r ->
-                                    "CALL".equalsIgnoreCase(
-                                            r.getOptionType()
-                                    )
-                            )
-
-                            .max(
-                                    Comparator.comparing(
-                                            OptionRsi::getOi
-                                    )
-                            );
-
-            Optional<OptionRsi> maxPut =
-                    latestRsi.values().stream()
-
-                            .filter(r ->
-                                    "PUT".equalsIgnoreCase(
-                                            r.getOptionType()
-                                    )
-                            )
-
-                            .max(
-                                    Comparator.comparing(
-                                            OptionRsi::getOi
-                                    )
-                            );
-
-            boolean callBuy =
-                    maxPut.map(r ->
-                            r.getClose() <= 5
-                    ).orElse(false);
-
-            boolean putBuy =
-                    maxCall.map(r ->
-                            r.getClose() <= 5
-                    ).orElse(false);
-
-            // =================================================
-            // SIGNAL
-            // =================================================
-
-            FlowSignal callSignal =
-                    signalService.evaluate(
-                            snap,
-                            "CALL",
-                            callBuy,
-                            putBuy
-                    );
-
-            FlowSignal putSignal =
-                    signalService.evaluate(
-                            snap,
-                            "PUT",
-                            callBuy,
-                            putBuy
-                    );
-
-            // =================================================
-            // APPLY SIGNAL
-            // =================================================
-
-            executeCallSignal(
-                    callSignal,
-                    callSave,
-                    Optional.of(callTxn)
-            );
-
-            executePutSignal(
-                    putSignal,
-                    putSave,
-                    Optional.of(putTxn)
-            );
-
-            // =================================================
-            // UPDATE TXN
-            // =================================================
-
-            updateCallTransaction(
-                    callTxn,
-                    callSignal
-            );
-
-            updatePutTransaction(
-                    putTxn,
-                    putSignal
-            );
-
-            // =================================================
-            // SAVE
-            // =================================================
-
-            rsiRepository.saveAll(
-                    List.of(
-                            callSave,
-                            putSave
-                    )
-            );
-
-            return null;
-
-        }).subscribeOn(
-                Schedulers.boundedElastic()
-        ).then();
-    }
-
-    // =========================================================
-    // SCHEDULER RESOLUTION
-    // =========================================================
-
-    private Scheduler resolveScheduler(LocalDate expiry) {
-
-        List<LocalDate> expiries =
-                store.allExpiriesSorted();
-
-        if (expiries.isEmpty()) {
-            return currentExpiryScheduler;
-        }
-
-        // CURRENT
-        if (expiry.equals(expiries.get(0))) {
-            return currentExpiryScheduler;
-        }
-
-        // NEXT
-        if (expiries.size() > 1 &&
-            expiry.equals(expiries.get(1))) {
-
-            return nextExpiryScheduler;
-        }
-
-        // NEXT-EXPIRY-1
-        if (expiries.size() > 2 &&
-            expiry.equals(expiries.get(2))) {
-
-            return nextExpiryScheduler1;
-        }
-        
-        // NEXT-EXPIRY-2
-        if (expiries.size() > 3 &&
-            expiry.equals(expiries.get(3))) {
-
-            return nextExpiryScheduler2;
-        }
-        
-        // NEXT-EXPIRY-3
-        if (expiries.size() > 4 &&
-            expiry.equals(expiries.get(4))) {
-
-            return nextExpiryScheduler3;
-        }
-        
-        // NEXT-EXPIRY-4
-        if (expiries.size() > 5 &&
-            expiry.equals(expiries.get(5))) {
-
-            return nextExpiryScheduler4;
-        }
-        
-        // FAR
-        return farExpiryScheduler;
-    }
-
-    // =========================================================
-    // TXN
-    // =========================================================
-
-    private OptionTransaction newTxn(
-            String symbol,
-            int securityId,
-            String optionType
-    ) {
-
-        return OptionTransaction.builder()
-
-                .symbol(symbol)
-
-                .securityId(securityId)
-
-                .optionType(optionType)
-
-                .timeframe("5S")
-
-                .position(0)
-
-                .active(true)
-
-                .sold(false)
-
-                .createdAt(LocalDateTime.now())
-
-                .updatedAt(LocalDateTime.now())
-
-                .build();
-    }
-
-    private void updateCallTransaction(
-            OptionTransaction txn,
-            FlowSignal signal
-    ) {
-
-        switch (signal) {
-
-            case BUY_CALL -> {
-
-                txn.setPosition(1);
-
-                txn.setUpdatedAt(
-                        LocalDateTime.now()
-                );
-            }
-
-            case SELL_CALL -> {
-
-                txn.setActive(false);
-            }
-
-            default -> {
-            }
-        }
-
-        transactionRepository.save(txn);
-    }
-
-    private void updatePutTransaction(
-            OptionTransaction txn,
-            FlowSignal signal
-    ) {
-
-        switch (signal) {
-
-            case BUY_PUT -> {
-
-                txn.setPosition(1);
-
-                txn.setUpdatedAt(
-                        LocalDateTime.now()
-                );
-            }
-
-            case SELL_PUT -> {
-
-                txn.setActive(false);
-            }
-
-            default -> {
-            }
-        }
-
-        transactionRepository.save(txn);
-    }
-
-    // =========================================================
-    // SIGNAL EXECUTION
-    // =========================================================
-
-    private void executeCallSignal(
-            FlowSignal signal,
-            OptionRsi callSave,
-            Optional<OptionTransaction> callOptFinal
-    ) {
-
-        switch (signal) {
-
-            case BUY_CALL ->
-                    callSave.setBuy(true);
-
-            case SELL_CALL ->
-                    callSave.setSell(true);
-
-            default -> {
-            }
-        }
-    }
-
-    private void executePutSignal(
-            FlowSignal signal,
-            OptionRsi putSave,
-            Optional<OptionTransaction> putOptFinal
-    ) {
-
-        switch (signal) {
-
-            case BUY_PUT ->
-                    putSave.setBuy(true);
-
-            case SELL_PUT ->
-                    putSave.setSell(true);
-
-            default -> {
-            }
-        }
-    }
-
-    // =========================================================
-    // ORDER
-    // =========================================================
-
-    private DhanOrderRequest buildRequest(
-            String type,
-            OptionRsi rsi
-    ) {
-
-        DhanOrderRequest request =
-                DhanOrderRequest.builder()
-
-                        .dhanClientId(clientId)
-
-                        .correlationId(
-                                CorrelationIdGenerator.generate(
-                                        "NIFTY"
-                                )
-                        )
-
-                        .transactionType(type)
-
-                        .exchangeSegment("NSE_FNO")
-
-                        .productType("INTRADAY")
-
-                        .orderType("MARKET")
-
-                        .validity("DAY")
-
-                        .securityId(
-                                String.valueOf(
-                                        rsi.getSecurityId()
-                                )
-                        )
-
-                        .quantity(65)
-
-                        .price(0)
-
-                        .triggerPrice(0)
-
-                        .afterMarketOrder(false)
-
-                        .build();
-
-        try {
-
-            ObjectMapper mapper =
-                    new ObjectMapper();
-
-            log.info(
-                    "DHAN ORDER REQUEST => {}",
-                    mapper.writeValueAsString(
-                            request
-                    )
-            );
-
-        } catch (Exception e) {
-
-            log.error(
-                    "Serialization error",
-                    e
-            );
-        }
-
-        return request;
-    }
-
-    // =========================================================
-    // DECODE
-    // =========================================================
-
-    private Tick decode(DataBuffer buffer) {
-
-        byte[] bytes =
-                new byte[
-                        buffer.readableByteCount()
-                ];
-
-        buffer.read(bytes);
-
-        ByteBuffer bb =
-                ByteBuffer.wrap(bytes)
-                        .order(ByteOrder.LITTLE_ENDIAN);
-
-        if (bb.remaining() < 43) {
-            return null;
-        }
-
-        bb.getShort();
-        bb.getShort();
-
-        int securityId = bb.getInt();
-
-        float ltp = bb.getFloat();
-
-        bb.getShort();
-        bb.getInt();
-
-        float atp = bb.getFloat();
-
-        bb.getInt();
-        bb.getInt();
-        bb.getInt();
-
-        int oi = bb.getInt();
-
-        int highestOi = bb.getInt();
-
-        DhanSubscription sub =
-                store.subscription(securityId);
-
-        if (sub == null) {
-            return null;
-        }
-
-        return new Tick(
-
-                securityId,
-
-                ltp,
-
-                oi,
-
-                highestOi,
-
-                atp,
-
-                sub.getOptionType(),
-
-                sub.getExpiryDate()
-        );
-    }
-
-    // =========================================================
-    // SUBSCRIBE
-    // =========================================================
-
-    public Mono<Void> subscribe(
-            String exchange,
-            String securityId,
-            String optionType,
-            Integer strike,
-            LocalDate expiry
-    ) {
-
-        store.add(
-                exchange,
-                securityId,
-                optionType,
-                strike,
-                expiry
-        );
-
-        if (session == null || !session.isOpen()) {
-            return Mono.empty();
-        }
-
-        return sendSubscription(
-                exchange,
-                securityId
-        );
-    }
-
-    private Mono<Void> sendAllSubscriptions() {
-
-        return Flux.fromIterable(store.all())
-
-                .flatMap(s ->
-                        sendSubscription(
-                                s.getExchange(),
-                                s.getSecurityId()
-                        )
-                )
-
-                .then();
-    }
-
-    private Mono<Void> sendSubscription(
-            String exchange,
-            String securityId
-    ) {
-
-        String payload = """
-                {
-                  "RequestCode": 21,
-                  "InstrumentCount": 1,
-                  "InstrumentList": [
-                    {
-                      "ExchangeSegment": "%s",
-                      "SecurityId": "%s"
-                    }
-                  ]
-                }
-                """.formatted(exchange, securityId);
-
-        return session.send(
-                Mono.just(
-                        session.textMessage(payload)
-                )
-        );
-    }
-}
-
-/*@Slf4j
+//
+//    private Mono<Void> sendSubscription(
+//            String exchange,
+//            String securityId
+//    ) {
+//
+//        String payload = """
+//                {
+//                  "RequestCode": 21,
+//                  "InstrumentCount": 1,
+//                  "InstrumentList": [
+//                    {
+//                      "ExchangeSegment": "%s",
+//                      "SecurityId": "%s"
+//                    }
+//                  ]
+//                }
+//                """.formatted(exchange, securityId);
+//
+//        return session.send(
+//                Mono.just(
+//                        session.textMessage(payload)
+//                )
+//        );
+//    }
+//}
+
+@Slf4j
 @Component
 public class DhanLiveDataHandler implements WebSocketHandler {
 
-    private final CandleRsiService rsiService;
-    private final DhanSubscriptionStore store;
-    private final DpiAggregatorService aggregator;
-    private final FlowSignalService signalService;
-    private final OptionRsiRepository rsiRepository;
-    private final OptionTransactionRepository transactionRepository;
+	private final CandleRsiService rsiService;
+	private final DhanSubscriptionStore store;
+	private final DpiAggregatorService aggregator;
+	private final FlowSignalService signalService;
+	private final OptionRsiRepository rsiRepository;
+	private final OptionTransactionRepository transactionRepository;
 
-    private volatile WebSocketSession session;
+	private volatile WebSocketSession session;
 
-    // =========================================================
-    // CACHE
-    // =========================================================
+	// =========================================================
+	// CACHE
+	// =========================================================
 
-    private final Map<Integer, OptionRsi> latestRsi =
-            new ConcurrentHashMap<>();
+	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
 
-    // =========================================================
-    // SCHEDULERS
-    // =========================================================
+	// =========================================================
+	// EXPIRY THREADS
+	// =========================================================
 
-    private final Scheduler currentScheduler =
-            Schedulers.newSingle("CURRENT");
+	private final Scheduler currentExpiryScheduler = Schedulers.newSingle("CURRENT-EXPIRY");
 
-    private final Scheduler nextScheduler =
-            Schedulers.newSingle("NEXT");
+	private final Scheduler nextExpiryScheduler = Schedulers.newSingle("NEXT-EXPIRY");
 
-    private final Scheduler farScheduler =
-            Schedulers.newSingle("FAR");
+	private final Scheduler nextExpiryScheduler1 = Schedulers.newSingle("NEXT-EXPIRY-1");
 
-    // =========================================================
-    // BATCH SAVE SINK
-    // =========================================================
+	private final Scheduler nextExpiryScheduler2 = Schedulers.newSingle("NEXT-EXPIRY-2");
 
-    private final Sinks.Many<OptionRsi> saveSink =
-            Sinks.many().multicast().onBackpressureBuffer();
+	private final Scheduler nextExpiryScheduler3 = Schedulers.newSingle("NEXT-EXPIRY-3");
 
-    // =========================================================
+	private final Scheduler nextExpiryScheduler4 = Schedulers.newSingle("NEXT-EXPIRY-4");
 
-    public DhanLiveDataHandler(
-            CandleRsiService rsiService,
-            DhanSubscriptionStore store,
-            DpiAggregatorService aggregator,
-            FlowSignalService signalService,
-            OptionRsiRepository rsiRepository,
-            OptionTransactionRepository transactionRepository
-    ) {
+	private final Scheduler farExpiryScheduler = Schedulers.newSingle("FAR-EXPIRY");
 
-        this.rsiService = rsiService;
-        this.store = store;
-        this.aggregator = aggregator;
-        this.signalService = signalService;
-        this.rsiRepository = rsiRepository;
-        this.transactionRepository = transactionRepository;
-    }
+	// =========================================================
 
-    // =========================================================
-    // INIT
-    // =========================================================
+	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
+			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository rsiRepository,
+			OptionTransactionRepository transactionRepository) {
 
-    @PostConstruct
-    public void init() {
+		this.rsiService = rsiService;
+		this.store = store;
+		this.aggregator = aggregator;
+		this.signalService = signalService;
+		this.rsiRepository = rsiRepository;
+		this.transactionRepository = transactionRepository;
+	}
 
-        Hooks.onErrorDropped(error ->
-                log.error("❌ Dropped Error", error)
-        );
+	// =========================================================
+	// HANDLE
+	// =========================================================
 
-        Hooks.onOperatorError((error, obj) -> {
+	@Override
+	public Mono<Void> handle(WebSocketSession session) {
 
-            log.error(
-                    "❌ Operator Error obj={}",
-                    obj,
-                    error
-            );
+		this.session = session;
 
-            return error;
-        });
+		log.info("🟢 WebSocket connected");
 
-        // =====================================================
-        // BATCH SAVE
-        // =====================================================
+		// =====================================================
+		// RESUBSCRIBE
+		// =====================================================
 
-        saveSink.asFlux()
+		Mono<Void> resubscribe = sendAllSubscriptions()
 
-                .bufferTimeout(
-                        200,
-                        Duration.ofSeconds(1)
-                )
+				.doOnSuccess(v -> log.info("✅ Subscriptions restored"));
 
-                .filter(batch -> !batch.isEmpty())
+		// =====================================================
+		// HEARTBEAT
+		// =====================================================
 
-                .publishOn(
-                        Schedulers.boundedElastic()
-                )
+		Mono<Void> heartbeat = session.send(
 
-                .subscribe(batch -> {
+				Flux.interval(Duration.ofSeconds(15))
 
-                    try {
+						.map(i -> session.pingMessage(f -> f.allocateBuffer(0))));
 
-                        rsiRepository.saveAll(batch);
+		// =====================================================
+		// RAW TICKS
+		// =====================================================
 
-                        log.info(
-                                "✅ Saved batch size={}",
-                                batch.size()
-                        );
+		Flux<Tick> ticks = session.receive()
 
-                    } catch (Exception e) {
-
-                        log.error(
-                                "❌ Batch save failed",
-                                e
-                        );
-                    }
-                });
-    }
-
-    // =========================================================
-    // HANDLE
-    // =========================================================
-
-    @Override
-    public Mono<Void> handle(WebSocketSession session) {
-
-        this.session = session;
-
-        log.info("🟢 WebSocket connected");
-
-        // =====================================================
-        // HEARTBEAT
-        // =====================================================
-
-        startHeartbeat();
-
-        // =====================================================
-        // RESUBSCRIBE
-        // =====================================================
-
-        Mono<Void> resubscribe =
-                sendAllSubscriptions();
-
-        // =====================================================
-        // RECEIVE TICKS
-        // =====================================================
-
-        Flux<Tick> ticks = session.receive()
-
-                .filter(msg ->
-                        msg.getType() ==
-                        WebSocketMessage.Type.BINARY
-                )
-
-                .mapNotNull(msg ->
-                        decode(msg.getPayload())
-                )
-
-                .filter(t ->
-                        t.oi() >= 1000 &&
-                        t.ltp() >= 0.80
-                )
-
-                .onBackpressureBuffer(
-                        50000,
-                        dropped -> log.warn(
-                                "⚠ Tick dropped"
-                        ),
-                        BufferOverflowStrategy.DROP_OLDEST
-                )
-
-                .doOnError(err ->
-                        log.error(
-                                "❌ WebSocket receive error",
-                                err
-                        )
-                )
-
-                .doFinally(signal ->
-                        log.warn(
-                                "⚠ Receive stream closed {}",
-                                signal
-                        )
-                )
-
-                .onBackpressureBuffer(
-                        50000,
-                        BufferOverflowStrategy.DROP_OLDEST
-                )
-
-                .share();
+				.doOnSubscribe(s -> log.info("📡 Listening ticks..."))
 
-        // =====================================================
-        // RSI PIPELINE
-        // =====================================================
+				.doOnError(err -> log.error("❌ WebSocket error", err))
 
-        Flux<OptionRsi> rsiFlux = ticks
+				.filter(msg -> msg.getType() == WebSocketMessage.Type.BINARY)
 
-                .flatMap(tick -> {
+				.mapNotNull(msg -> decode(msg.getPayload()))
 
-                    Scheduler scheduler =
-                            resolveScheduler(
-                                    tick.expiry()
-                            );
+				.filter(t -> t.oi() >= 1000 && t.ltp() >= 0.80)
 
-                    return Mono.fromCallable(() -> {
+				.doOnNext(t -> log.info("📥 Tick {} {}", t.securityId(), t.expiry()))
 
-                                // =========================
-                                // 4 SECOND
-                                // =========================
+				.onBackpressureBuffer(50000, dropped -> log.warn("⚠ Tick dropped"), BufferOverflowStrategy.DROP_OLDEST)
 
-                                rsiService.onLtp(
-                                        "NIFTY",
-                                        tick.securityId(),
-                                        tick.optionType(),
-                                        tick.ltp(),
-                                        tick.oi(),
-                                        tick.highestOi(),
-                                        tick.atp(),
-                                        4
-                                );
+				.share();
 
-                                // =========================
-                                // 5 SECOND
-                                // =========================
+		// =====================================================
+		// GROUP BY EXPIRY
+		// =====================================================
 
-                                return rsiService.onLtp(
-                                        "NIFTY",
-                                        tick.securityId(),
-                                        tick.optionType(),
-                                        tick.ltp(),
-                                        tick.oi(),
-                                        tick.highestOi(),
-                                        tick.atp(),
-                                        5
-                                );
-                            })
+		Flux<GroupedFlux<LocalDate, Tick>> grouped = ticks.groupBy(Tick::expiry);
 
-                            .subscribeOn(scheduler);
+		// =====================================================
+		// RSI ENGINE
+		// =====================================================
 
-                }, 32)
+		Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
 
-                .filter(Objects::nonNull)
+			LocalDate expiry = group.key();
 
-                .doOnNext(rsi -> {
+			Scheduler scheduler = resolveScheduler(expiry);
 
-                    latestRsi.put(
-                            rsi.getSecurityId(),
-                            rsi
-                    );
+			log.info("✅ Expiry {} mapped to {}", expiry, scheduler);
 
-                    aggregator.add(rsi, 5);
-                })
+			return group
 
-                .onErrorContinue((err, obj) ->
+					// STRICT ORDER
+					.concatMap(t ->
 
-                        log.error(
-                                "❌ RSI ERROR obj={}",
-                                obj,
-                                err
-                        )
-                )
+					Mono.fromCallable(() -> {
 
-                .publish()
+						log.info("🔥 Processing Tick {} {}", t.securityId(), expiry);
 
-                .refCount(1);
+						// 4 SEC
+						rsiService.onLtp("NIFTY", t.securityId(), t.optionType(), t.ltp(), t.oi(), t.highestOi(),
+								t.atp(), 4, expiry);
 
-        // =====================================================
-        // CURRENT EXPIRY ONLY
-        // =====================================================
+						// 5 SEC
+						return rsiService.onLtp("NIFTY", t.securityId(), t.optionType(), t.ltp(), t.oi(), t.highestOi(),
+								t.atp(), 5, expiry);
+					})
 
-        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+							// CRITICAL
+							.subscribeOn(scheduler))
 
-                .filter(rsi ->
-                        store.isCurrentExpiry(
-                                rsi.getExpiry()
-                        )
-                );
+					.filter(Objects::nonNull)
 
-        // =====================================================
-        // PROCESSING PIPELINE
-        // =====================================================
+					.doOnNext(rsi -> {
 
-        Mono<Void> processing = currentExpiryFlux
+						log.info("✅ RSI {} {} {}", rsi.getSecurityId(), rsi.getOptionType(), rsi.getCandleTime());
 
-                .bufferUntilChanged(
-                        OptionRsi::getCandleTime
-                )
+						latestRsi.put(rsi.getSecurityId(), rsi);
 
-                .concatMap(this::processBatch)
+						aggregator.add(rsi, 5);
+					})
 
-                .then();
+					.doOnError(err -> log.error("❌ RSI ERROR", err));
 
-        // =====================================================
-        // START PROCESSING
-        // =====================================================
+		}).share();
 
-        processing.subscribe(
+		// =====================================================
+		// CURRENT EXPIRY ONLY
+		// =====================================================
 
-                null,
+		Flux<OptionRsi> currentExpiryFlux = rsiFlux
 
-                err -> log.error(
-                        "❌ Processing error",
-                        err
-                )
-        );
+				.filter(rsi -> {
 
-        // =====================================================
-        // KEEP SOCKET ALIVE
-        // =====================================================
+					log.info("RSI EXPIRY={} CURRENT={}", rsi.getExpiry(), store.currentExpiry());
 
-        return resubscribe
+					boolean current = store.isCurrentExpiry(rsi.getExpiry());
 
-                .then(
-                        Mono.<Void>never()
-                )
+					log.info("MATCH RESULT={}", current);
 
-                .doFinally(signal -> {
+					if (current) {
 
-                    log.warn(
-                            "🔌 WebSocket disconnected {}",
-                            signal
-                    );
+						log.info("🎯 CURRENT EXPIRY {}", rsi.getSecurityId());
+					}
 
-                    this.session = null;
-                });
-    }
+					return current;
+				});
 
-    // =========================================================
-    // HEARTBEAT
-    // =========================================================
+		// =====================================================
+		// FINAL DECISION
+		// =====================================================
 
-    private void startHeartbeat() {
+		Mono<Void> finalDecision = currentExpiryFlux
 
-        Flux.interval(Duration.ofSeconds(15))
+				// SINGLE ORDERED LANE
+				.publishOn(Schedulers.single())
 
-                .flatMap(i -> {
+				// GROUP CANDLE
+				.bufferUntilChanged(OptionRsi::getCandleTime)
 
-                    if (session != null &&
-                        session.isOpen()) {
+				// STRICT ORDER
+				.concatMap(this::processBatch)
 
-                        return session.send(
+				.doOnError(err -> log.error("❌ FINAL DECISION ERROR", err))
 
-                                Mono.just(
+				.then();
 
-                                        session.pingMessage(
-                                                f -> f.allocateBuffer(0)
-                                        )
-                                )
-                        );
-                    }
+		// =====================================================
+		// PIPELINE
+		// =====================================================
 
-                    return Mono.empty();
-                })
+		return resubscribe.then(
 
-                .onErrorResume(e -> {
+				Mono.when(
 
-                    log.error(
-                            "❌ Heartbeat error",
-                            e
-                    );
+						// IMPORTANT
+						rsiFlux.then(),
 
-                    return Mono.empty();
-                })
+						finalDecision,
 
-                .subscribe();
-    }
+						heartbeat))
+				.takeUntilOther(session.closeStatus()).doFinally(signal -> {
 
-    // =========================================================
-    // PROCESS BATCH
-    // =========================================================
+					log.warn("🔌 WebSocket disconnected {}", signal);
 
-    private Mono<Void> processBatch(
-            List<OptionRsi> batch
-    ) {
+					this.session = null;
+				});
+	}
 
-        return Mono.fromRunnable(() -> {
+	// =========================================================
+	// PROCESS BATCH
+	// =========================================================
 
-            try {
+	private Mono<Void> processBatch(List<OptionRsi> batch) {
 
-                if (batch.isEmpty()) {
-                    return;
-                }
+		return Mono.fromCallable(() -> {
 
-                // =============================================
-                // SNAPSHOT
-                // =============================================
+			if (batch.isEmpty()) {
+				return null;
+			}
 
-                var snap =
-                        aggregator.snapshot(5);
+			log.info("🔥 PROCESS BATCH SIZE={}", batch.size());
 
-                double callFlow =
-                        snap.callDpi();
+			// =================================================
+			// SNAPSHOT
+			// =================================================
 
-                double putFlow =
-                        snap.putDpi();
+			var snap = aggregator.snapshot(5);
 
-                double netFlow =
-                        snap.netDpi();
+			double callFlow = snap.callDpi();
+			double putFlow = snap.putDpi();
+			double netFlow = snap.netDpi();
 
-                // =============================================
-                // TRANSACTION
-                // =============================================
+			log.info("📊 FLOW CALL={} PUT={} NET={}", callFlow, putFlow, netFlow);
 
-                OptionTransaction callTxn =
-                        transactionRepository
-                                .findByTimeframeAndOptionTypeAndActive(
-                                        "5S",
-                                        "CALL",
-                                        true
-                                )
-                                .orElse(null);
+			// =================================================
+			// TXN
+			// =================================================
 
-                OptionTransaction putTxn =
-                        transactionRepository
-                                .findByTimeframeAndOptionTypeAndActive(
-                                        "5S",
-                                        "PUT",
-                                        true
-                                )
-                                .orElse(null);
+			OptionTransaction callTxn = transactionRepository.findByTimeframeAndOptionTypeAndActive("5S", "CALL", true)
+					.orElseGet(() -> transactionRepository.save(newTxn("NIFTY", 72171, "CALL")));
 
-                if (callTxn == null ||
-                    putTxn == null) {
+			OptionTransaction putTxn = transactionRepository.findByTimeframeAndOptionTypeAndActive("5S", "PUT", true)
+					.orElseGet(() -> transactionRepository.save(newTxn("NIFTY", 72172, "PUT")));
 
-                    return;
-                }
+			// =================================================
+			// FIND RSI
+			// =================================================
 
-                // =============================================
-                // FIND RSI
-                // =============================================
+			OptionRsi call = batch.stream()
 
-                OptionRsi call = batch.stream()
+					.filter(r -> r.getSecurityId() == callTxn.getSecurityId())
 
-                        .filter(r ->
-                                r.getSecurityId() ==
-                                callTxn.getSecurityId()
-                        )
+					.findFirst()
 
-                        .findFirst()
+					.orElse(null);
 
-                        .orElse(null);
+			OptionRsi put = batch.stream()
 
-                OptionRsi put = batch.stream()
+					.filter(r -> r.getSecurityId() == putTxn.getSecurityId())
 
-                        .filter(r ->
-                                r.getSecurityId() ==
-                                putTxn.getSecurityId()
-                        )
+					.findFirst()
 
-                        .findFirst()
+					.orElse(null);
 
-                        .orElse(null);
+			if (call == null || put == null) {
 
-                if (call == null ||
-                    put == null) {
+				log.warn("⚠ Missing RSI CALL={} PUT={}", callTxn.getSecurityId(), putTxn.getSecurityId());
 
-                    return;
-                }
+				return null;
+			}
 
-                // =============================================
-                // COPY
-                // =============================================
+			// =================================================
+			// SAVE COPY
+			// =================================================
 
-                OptionRsi callSave =
-                        new OptionRsi(call);
+			OptionRsi callSave = new OptionRsi(call);
+			OptionRsi putSave = new OptionRsi(put);
 
-                OptionRsi putSave =
-                        new OptionRsi(put);
+			callSave.setCallFlow(callFlow);
+			callSave.setPutFlow(putFlow);
+			callSave.setNetFlow(netFlow);
 
-                // =============================================
-                // FLOW
-                // =============================================
+			putSave.setCallFlow(callFlow);
+			putSave.setPutFlow(putFlow);
+			putSave.setNetFlow(netFlow);
 
-                callSave.setCallFlow(callFlow);
-                callSave.setPutFlow(putFlow);
-                callSave.setNetFlow(netFlow);
+			// ================= BUY LOGIC =================
+//			Optional<OptionRsi> maxCall = batch.stream()
+//					.filter(r -> "CALL".equalsIgnoreCase(r.getOptionType()))
+//					.max(Comparator.comparing(OptionRsi::getOi));
+//
+//			Optional<OptionRsi> maxPut = batch.stream()
+//					.filter(r -> "PUT".equalsIgnoreCase(r.getOptionType())).max(Comparator.comparing(OptionRsi::getOi));
 
-                putSave.setCallFlow(callFlow);
-                putSave.setPutFlow(putFlow);
-                putSave.setNetFlow(netFlow);
+			boolean callBuy = false;
+			boolean putBuy = false;
 
-                // =============================================
-                // SIGNAL
-                // =============================================
+			// ================= SIGNAL =================
+			FlowSignal callSignal = signalService.evaluate(snap, "CALL", callBuy, putBuy);
+			FlowSignal putSignal = signalService.evaluate(snap, "PUT", callBuy, putBuy);
 
-                FlowSignal callSignal =
-                        signalService.evaluate(
-                                snap,
-                                "CALL",
-                                true,
-                                false
-                        );
+			// ================= APPLY SIGNAL TO RSI =================
+			executeCallSignal(callSignal, callSave, Optional.of(callTxn));
+			executePutSignal(putSignal, putSave, Optional.of(putTxn));
 
-                FlowSignal putSignal =
-                        signalService.evaluate(
-                                snap,
-                                "PUT",
-                                false,
-                                true
-                        );
+			// ================= UPDATE TRANSACTION =================
+			updateCallTransaction(callTxn, callSignal);
+			updatePutTransaction(putTxn, putSignal);
 
-                // =============================================
-                // APPLY SIGNAL
-                // =============================================
+			// ================= SAVE =================
+			rsiRepository.saveAll(List.of(callSave, putSave));
 
-                if (callSignal ==
-                    FlowSignal.BUY_CALL) {
+			log.info("✅ SAVED");
 
-                    callSave.setBuy(true);
-                }
+			return null;
 
-                if (callSignal ==
-                    FlowSignal.SELL_CALL) {
+		}).subscribeOn(Schedulers.boundedElastic()).then();
+	}
 
-                    callSave.setSell(true);
-                }
+	private void updateCallTransaction(OptionTransaction txn, FlowSignal signal) {
 
-                if (putSignal ==
-                    FlowSignal.BUY_PUT) {
+		switch (signal) {
 
-                    putSave.setBuy(true);
-                }
+		case BUY_CALL -> {
 
-                if (putSignal ==
-                    FlowSignal.SELL_PUT) {
+			txn.setPosition(1);
 
-                    putSave.setSell(true);
-                }
+			txn.setUpdatedAt(LocalDateTime.now());
+		}
 
-                // =============================================
-                // SAVE ASYNC
-                // =============================================
+		case SELL_CALL -> {
 
-                saveSink.tryEmitNext(callSave);
+			txn.setActive(false);
+		}
 
-                saveSink.tryEmitNext(putSave);
+		default -> {
+		}
+		}
 
-            } catch (Exception e) {
+		transactionRepository.save(txn);
+	}
 
-                log.error(
-                        "❌ processBatch failed",
-                        e
-                );
-            }
+	private void updatePutTransaction(OptionTransaction txn, FlowSignal signal) {
 
-        }).subscribeOn(
-                Schedulers.boundedElastic()
-        ).then();
-    }
+		switch (signal) {
 
-    // =========================================================
-    // SCHEDULER RESOLUTION
-    // =========================================================
+		case BUY_PUT -> {
 
-    private Scheduler resolveScheduler(
-            LocalDate expiry
-    ) {
+			txn.setPosition(1);
 
-        List<LocalDate> expiries =
-                store.allExpiriesSorted();
+			txn.setUpdatedAt(LocalDateTime.now());
+		}
 
-        if (expiries.isEmpty()) {
-            return currentScheduler;
-        }
+		case SELL_PUT -> {
 
-        if (expiry.equals(expiries.get(0))) {
-            return currentScheduler;
-        }
+			txn.setActive(false);
+		}
 
-        if (expiries.size() > 1 &&
-            expiry.equals(expiries.get(1))) {
+		default -> {
+		}
+		}
 
-            return nextScheduler;
-        }
+		transactionRepository.save(txn);
+	}
 
-        return farScheduler;
-    }
+// =========================================================
+// SIGNAL EXECUTION
+// =========================================================
 
-    // =========================================================
-    // DECODE
-    // =========================================================
+	private void executeCallSignal(FlowSignal signal, OptionRsi callSave, Optional<OptionTransaction> callOptFinal) {
+		switch (signal) {
+		case BUY_CALL -> callSave.setBuy(true);
+		case SELL_CALL -> callSave.setSell(true);
+		default -> {
+		}
+		}
+	}
 
-    private Tick decode(DataBuffer buffer) {
+	private void executePutSignal(FlowSignal signal, OptionRsi putSave, Optional<OptionTransaction> putOptFinal) {
+		switch (signal) {
+		case BUY_PUT -> putSave.setBuy(true);
+		case SELL_PUT -> putSave.setSell(true);
+		default -> {
+		}
+		}
+	}
 
-        try {
+	// =========================================================
+	// RESOLVE SCHEDULER
+	// =========================================================
 
-            byte[] bytes =
-                    new byte[
-                            buffer.readableByteCount()
-                    ];
+	private Scheduler resolveScheduler(LocalDate expiry) {
+		List<LocalDate> expiries = store.allExpiriesSorted();
+		if (expiries.isEmpty()) {
+			return currentExpiryScheduler;
+		}
 
-            buffer.read(bytes);
+		if (expiry.equals(expiries.get(0))) {
+			return currentExpiryScheduler;
+		}
 
-            ByteBuffer bb =
-                    ByteBuffer.wrap(bytes)
-                            .order(ByteOrder.LITTLE_ENDIAN);
+		if (expiries.size() > 1 && expiry.equals(expiries.get(1))) {
+			return nextExpiryScheduler;
+		}
 
-            if (bb.remaining() < 43) {
-                return null;
-            }
+		if (expiries.size() > 2 && expiry.equals(expiries.get(2))) {
+			return nextExpiryScheduler1;
+		}
 
-            bb.getShort();
-            bb.getShort();
+		if (expiries.size() > 3 && expiry.equals(expiries.get(3))) {
+			return nextExpiryScheduler2;
+		}
 
-            int securityId =
-                    bb.getInt();
+		if (expiries.size() > 4 && expiry.equals(expiries.get(4))) {
+			return nextExpiryScheduler3;
+		}
 
-            float ltp =
-                    bb.getFloat();
+		if (expiries.size() > 5 && expiry.equals(expiries.get(5))) {
+			return nextExpiryScheduler4;
+		}
 
-            bb.getShort();
+		return farExpiryScheduler;
+	}
 
-            bb.getInt();
+	// =========================================================
+	// NEW TXN
+	// =========================================================
 
-            float atp =
-                    bb.getFloat();
+	private OptionTransaction newTxn(String symbol, int securityId, String optionType) {
+		return OptionTransaction.builder()
+				.symbol(symbol)
+				.securityId(securityId)
+				.optionType(optionType)
+				.timeframe("5S")
+				.position(0)
+				.active(true)
+				.sold(false)
+				.createdAt(LocalDateTime.now())
+				.updatedAt(LocalDateTime.now())
+				.build();
+	}
 
-            bb.getInt();
-            bb.getInt();
-            bb.getInt();
+	// =========================================================
+	// DECODE
+	// =========================================================
 
-            int oi =
-                    bb.getInt();
+	private Tick decode(DataBuffer buffer) {
 
-            int highestOi =
-                    bb.getInt();
+		byte[] bytes = new byte[buffer.readableByteCount()];
 
-            DhanSubscription sub =
-                    store.subscription(
-                            securityId
-                    );
+		buffer.read(bytes);
 
-            if (sub == null) {
-                return null;
-            }
+		ByteBuffer bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
 
-            return new Tick(
+		if (bb.remaining() < 43) {
+			return null;
+		}
 
-                    securityId,
+		bb.getShort();
+		bb.getShort();
 
-                    ltp,
+		int securityId = bb.getInt();
 
-                    oi,
+		float ltp = bb.getFloat();
 
-                    highestOi,
+		bb.getShort();
+		bb.getInt();
 
-                    atp,
+		float atp = bb.getFloat();
 
-                    sub.getOptionType(),
+		bb.getInt();
+		bb.getInt();
+		bb.getInt();
 
-                    sub.getExpiryDate()
-            );
+		int oi = bb.getInt();
 
-        } catch (Exception e) {
+		int highestOi = bb.getInt();
 
-            log.error(
-                    "❌ Decode error",
-                    e
-            );
+		DhanSubscription sub = store.subscription(securityId);
 
-            return null;
-        }
-    }
+		if (sub == null) {
+			return null;
+		}
 
-    // =========================================================
-    // SUBSCRIBE
-    // =========================================================
+		return new Tick(
+				securityId,
+				ltp,
+				oi,
+				highestOi,
+				atp,
+				sub.getOptionType(),
+				sub.getExpiryDate());
+	}
 
-    public Mono<Void> subscribe(
-            String exchange,
-            String securityId,
-            String optionType,
-            Integer strike,
-            LocalDate expiry
-    ) {
+	// =========================================================
+	// SUBSCRIBE
+	// =========================================================
 
-        store.add(
-                exchange,
-                securityId,
-                optionType,
-                strike,
-                expiry
-        );
+	public Mono<Void> subscribe(String exchange, String securityId, String optionType, Integer strike,
+			LocalDate expiry) {
 
-        if (session == null ||
-            !session.isOpen()) {
+		store.add(exchange, securityId, optionType, strike, expiry);
 
-            return Mono.empty();
-        }
+		if (session == null || !session.isOpen()) {
+			return Mono.empty();
+		}
 
-        return sendSubscription(
-                exchange,
-                securityId
-        );
-    }
+		return sendSubscription(exchange, securityId);
+	}
 
-    // =========================================================
-    // SEND ALL SUBSCRIPTIONS
-    // =========================================================
+	private Mono<Void> sendAllSubscriptions() {
 
-    private Mono<Void> sendAllSubscriptions() {
+		return Flux.fromIterable(store.all())
+				.flatMap(s -> sendSubscription(s.getExchange(), s.getSecurityId()))
+				.then();
+	}
 
-        return Flux.fromIterable(store.all())
+	private Mono<Void> sendSubscription(String exchange, String securityId) {
 
-                .delayElements(
-                        Duration.ofMillis(50)
-                )
+		String payload = """
+				{
+				  "RequestCode": 21,
+				  "InstrumentCount": 1,
+				  "InstrumentList": [
+				    {
+				      "ExchangeSegment": "%s",
+				      "SecurityId": "%s"
+				    }
+				  ]
+				}
+				""".formatted(exchange, securityId);
 
-                .concatMap(sub ->
-
-                        sendSubscription(
-                                sub.getExchange(),
-                                sub.getSecurityId()
-                        )
-                )
-
-                .then();
-    }
-
-    // =========================================================
-    // SEND SUBSCRIPTION
-    // =========================================================
-
-    private Mono<Void> sendSubscription(
-            String exchange,
-            String securityId
-    ) {
-
-        if (session == null ||
-            !session.isOpen()) {
-
-            return Mono.empty();
-        }
-
-        String payload = """
-                {
-                  "RequestCode": 21,
-                  "InstrumentCount": 1,
-                  "InstrumentList": [
-                    {
-                      "ExchangeSegment": "%s",
-                      "SecurityId": "%s"
-                    }
-                  ]
-                }
-                """.formatted(
-                exchange,
-                securityId
-        );
-
-        return session.send(
-
-                Mono.just(
-                        session.textMessage(payload)
-                )
-        )
-
-        .doOnSuccess(v ->
-
-                log.info(
-                        "✅ Subscribed {}",
-                        securityId
-                )
-        )
-
-        .doOnError(e ->
-
-                log.error(
-                        "❌ Subscription failed {}",
-                        securityId,
-                        e
-                )
-        )
-
-        .onErrorResume(e ->
-                Mono.empty()
-        );
-    }
-}*/
+		return session.send(Mono.just(session.textMessage(payload)));
+	}
+}

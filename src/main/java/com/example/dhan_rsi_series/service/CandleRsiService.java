@@ -1590,7 +1590,7 @@ public class CandleRsiService {
     // =========================================================
     public OptionRsi onLtp(String symbol, int securityId, String optionType,
                           double ltp, int oi, int highestOi,
-                          double atp, int timeframeSeconds) {
+                          double atp, int timeframeSeconds, LocalDate expiry) {
 
         long now = System.currentTimeMillis() / 1000;
         String key = symbol + "_" + securityId + "_" + timeframeSeconds;
@@ -1650,7 +1650,7 @@ public class CandleRsiService {
         // 5 SEC FLOW
         // =====================================================
         return process(symbol, securityId, optionType,
-                snap, oi, highestOi, atp);
+                snap, oi, highestOi, atp, expiry);
     }
 
     // =========================================================
@@ -1749,7 +1749,7 @@ public class CandleRsiService {
                              CandleSnapshot c,
                              int oi,
                              int highestOi,
-                             double atp) {
+                             double atp, LocalDate expiry) {
 
         String key = symbol + "_" + securityId + "_5";
 
@@ -1790,6 +1790,7 @@ public class CandleRsiService {
         e.setDpi(dpi);
         e.setWeightedOi(weightedOi);
         e.setGamma(gamma);
+        e.setExpiry(expiry);
 
         latestMap.put(securityId, e);
 

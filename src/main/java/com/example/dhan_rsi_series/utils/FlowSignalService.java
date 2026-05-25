@@ -138,7 +138,7 @@ public class FlowSignalService {
 //                return FlowSignal.BUY_CALL;
 //            }
 
-			if ((callBuy || netFlow > 0) && isEnableBuy) {
+			if (netFlow > 0 && isEnableBuy) {
 
 				return FlowSignal.BUY_CALL;
 			}
@@ -176,7 +176,7 @@ public class FlowSignalService {
 //                return FlowSignal.BUY_PUT;
 //            }
 
-			if ((putBuy || netFlow < 0) && isEnableBuy) {
+			if (netFlow < 0 && isEnableBuy) {
 
 				return FlowSignal.BUY_PUT;
 			}
