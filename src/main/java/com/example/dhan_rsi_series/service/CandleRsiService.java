@@ -1612,7 +1612,7 @@ public class CandleRsiService {
         // =====================================================
         // 🔥 4 SEC → GAMMA ENGINE
         // =====================================================
-        if (timeframeSeconds == 4) {
+        if (!optionType.equalsIgnoreCase("FUTURE") && timeframeSeconds == 4) {
 
             OptionRsi rsi4 = new OptionRsi();
             rsi4.setSecurityId(securityId);
@@ -1753,7 +1753,7 @@ public class CandleRsiService {
 
         String key = symbol + "_" + securityId + "_5";
 
-        double gamma = selectedGammaMap.getOrDefault(securityId, 0.0);
+        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0113 : selectedGammaMap.getOrDefault(securityId, 0.0);
 
         Integer prevOi = lastOiMap.getOrDefault(key, oi);
         int deltaOi = oi - prevOi;

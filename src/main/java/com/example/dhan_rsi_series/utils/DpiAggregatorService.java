@@ -538,10 +538,12 @@ public class DpiAggregatorService {
 	        bucket.callDpi.add(safe(r.getDpi()));
 	        bucket.callWeightedOi.add(safe(r.getWeightedOi()));
 
-	    } else {
+	    } else if ("PUT".equalsIgnoreCase(r.getOptionType())) {
 
 	        bucket.putDpi.add(safe(r.getDpi()));
 	        bucket.putWeightedOi.add(safe(r.getWeightedOi()));
+	    } else if ("FUTURE".equalsIgnoreCase(r.getOptionType())) {
+	    	bucket.futureDpi.add(r.getDpi());
 	    }
 
 	    // =====================================================
@@ -558,11 +560,12 @@ public class DpiAggregatorService {
 		ConcurrentHashMap<LocalDate, Bucket> expiryMap = buckets.get(tf);
 
 		if (expiryMap == null || expiryMap.isEmpty()) {
-			return new Snapshot(0, 0, 0, 0, 0);
+			return new Snapshot(0, 0, 0, 0, 0, 0);
 		}
 
 		double totalCallFlow = 0;
 		double totalPutFlow = 0;
+		double totalFutureFlow = 0;
 
 		double totalCallOi = 0;
 		double totalPutOi = 0;
@@ -572,12 +575,13 @@ public class DpiAggregatorService {
 
 			totalCallFlow += bucket.baseCallFlow + bucket.callDpi.sum();
 			totalPutFlow += bucket.basePutFlow + bucket.putDpi.sum();
+			totalFutureFlow += bucket.baseFutureFlow + bucket.futureDpi.sum();
 
 			totalCallOi += bucket.callWeightedOi.sum();
 			totalPutOi += bucket.putWeightedOi.sum();
 		}
 
-		return new Snapshot(totalCallFlow, totalPutFlow, totalCallOi, totalPutOi, totalCallOi - totalPutOi);
+		return new Snapshot(totalCallFlow, totalPutFlow, totalFutureFlow, totalCallOi, totalPutOi, totalCallOi - totalPutOi);
 	}
 	
 	// =========================================================
@@ -607,6 +611,9 @@ public class DpiAggregatorService {
 
 	        double finalPutFlow =
 	                bucket.basePutFlow + bucket.putDpi.sum();
+	        
+	        double finalFutureFlow = 
+	        		bucket.baseFutureFlow + bucket.futureDpi.sum();
 
 	        // =================================================
 	        // FIND EXISTING RECORD
@@ -621,6 +628,7 @@ public class DpiAggregatorService {
 	        moneyFlow.setExpiryDate(expiry);
 	        moneyFlow.setCallFlow(finalCallFlow);
 	        moneyFlow.setPutFlow(finalPutFlow);
+	        moneyFlow.setFutureFlow(finalFutureFlow);
 	        moneyFlow.setActive(true);
 	        moneyFlow.setCreatedAt(LocalDateTime.now());
 
@@ -656,10 +664,12 @@ public class DpiAggregatorService {
 		// BASE FROM DB
 		double baseCallFlow = 0;
 		double basePutFlow = 0;
+		double baseFutureFlow = 0;
 
 		// LIVE DPI
 		DoubleAdder callDpi = new DoubleAdder();
 		DoubleAdder putDpi = new DoubleAdder();
+		DoubleAdder futureDpi = new DoubleAdder();
 
 		// OI
 		DoubleAdder callWeightedOi = new DoubleAdder();
@@ -669,11 +679,11 @@ public class DpiAggregatorService {
 	// =========================================================
 	// SNAPSHOT MODEL
 	// =========================================================
-	public record Snapshot(double callDpi, double putDpi, double callWeightedOi, double putWeightedOi,
+	public record Snapshot(double callDpi, double putDpi, double futureDpi, double callWeightedOi, double putWeightedOi,
 			double weightedOi) {
 
 		public double netDpi() {
-			return callDpi - putDpi;
+			return (callDpi - putDpi) + (futureDpi);
 		}
 	}
 

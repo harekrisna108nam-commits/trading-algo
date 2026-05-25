@@ -29,6 +29,7 @@ public class MoneyFlow {
 	private String optionType;
 	private double callFlow;
 	private double putFlow;
+	private double futureFlow;
 	private LocalDate expiryDate;
 	private boolean active = true;
 	private LocalDateTime createdAt = LocalDateTime.now();

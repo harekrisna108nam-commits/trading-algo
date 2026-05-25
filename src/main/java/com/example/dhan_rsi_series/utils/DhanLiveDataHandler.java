@@ -1371,7 +1371,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                                     transactionRepository.save(
                                             newTxn(
                                                     "NIFTY",
-                                                    41758,
+                                                    72171,
                                                     "CALL"
                                             )
                                     )
@@ -1388,7 +1388,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                                     transactionRepository.save(
                                             newTxn(
                                                     "NIFTY",
-                                                    41759,
+                                                    72172,
                                                     "PUT"
                                             )
                                     )
