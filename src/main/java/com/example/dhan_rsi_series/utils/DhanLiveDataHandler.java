@@ -4,15 +4,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -23,22 +19,20 @@ import com.example.dhan_rsi_series.entity.DhanSubscription;
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
-import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
 import com.example.dhan_rsi_series.service.CandleRsiService;
-import com.example.dhan_rsi_series.service.DhanFundLimitService;
-import com.example.dhan_rsi_series.service.DhanOrderService;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.BufferOverflowStrategy;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.GroupedFlux;
+import reactor.core.publisher.Hooks;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-import tools.jackson.databind.ObjectMapper;
 
 //@Slf4j
 //@Component
@@ -1056,7 +1050,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 }*/
 
 
-@Slf4j
+/*@Slf4j
 @Component
 public class DhanLiveDataHandler implements WebSocketHandler {
 
@@ -1447,7 +1441,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
             putSave.setNetFlow(netFlow);
 
             // =================================================
-            // BUY LOGIC
+            //                     BUY LOGIC
             // =================================================
 
             Optional<OptionRsi> maxCall =
@@ -1947,6 +1941,787 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                 Mono.just(
                         session.textMessage(payload)
                 )
+        );
+    }
+}*/
+
+@Slf4j
+@Component
+public class DhanLiveDataHandler implements WebSocketHandler {
+
+    private final CandleRsiService rsiService;
+    private final DhanSubscriptionStore store;
+    private final DpiAggregatorService aggregator;
+    private final FlowSignalService signalService;
+    private final OptionRsiRepository rsiRepository;
+    private final OptionTransactionRepository transactionRepository;
+
+    private volatile WebSocketSession session;
+
+    // =========================================================
+    // CACHE
+    // =========================================================
+
+    private final Map<Integer, OptionRsi> latestRsi =
+            new ConcurrentHashMap<>();
+
+    // =========================================================
+    // SCHEDULERS
+    // =========================================================
+
+    private final Scheduler currentScheduler =
+            Schedulers.newSingle("CURRENT");
+
+    private final Scheduler nextScheduler =
+            Schedulers.newSingle("NEXT");
+
+    private final Scheduler farScheduler =
+            Schedulers.newSingle("FAR");
+
+    // =========================================================
+    // BATCH SAVE SINK
+    // =========================================================
+
+    private final Sinks.Many<OptionRsi> saveSink =
+            Sinks.many().multicast().onBackpressureBuffer();
+
+    // =========================================================
+
+    public DhanLiveDataHandler(
+            CandleRsiService rsiService,
+            DhanSubscriptionStore store,
+            DpiAggregatorService aggregator,
+            FlowSignalService signalService,
+            OptionRsiRepository rsiRepository,
+            OptionTransactionRepository transactionRepository
+    ) {
+
+        this.rsiService = rsiService;
+        this.store = store;
+        this.aggregator = aggregator;
+        this.signalService = signalService;
+        this.rsiRepository = rsiRepository;
+        this.transactionRepository = transactionRepository;
+    }
+
+    // =========================================================
+    // INIT
+    // =========================================================
+
+    @PostConstruct
+    public void init() {
+
+        Hooks.onErrorDropped(error ->
+                log.error("❌ Dropped Error", error)
+        );
+
+        Hooks.onOperatorError((error, obj) -> {
+
+            log.error(
+                    "❌ Operator Error obj={}",
+                    obj,
+                    error
+            );
+
+            return error;
+        });
+
+        // =====================================================
+        // BATCH SAVE
+        // =====================================================
+
+        saveSink.asFlux()
+
+                .bufferTimeout(
+                        200,
+                        Duration.ofSeconds(1)
+                )
+
+                .filter(batch -> !batch.isEmpty())
+
+                .publishOn(
+                        Schedulers.boundedElastic()
+                )
+
+                .subscribe(batch -> {
+
+                    try {
+
+                        rsiRepository.saveAll(batch);
+
+                        log.info(
+                                "✅ Saved batch size={}",
+                                batch.size()
+                        );
+
+                    } catch (Exception e) {
+
+                        log.error(
+                                "❌ Batch save failed",
+                                e
+                        );
+                    }
+                });
+    }
+
+    // =========================================================
+    // HANDLE
+    // =========================================================
+
+    @Override
+    public Mono<Void> handle(WebSocketSession session) {
+
+        this.session = session;
+
+        log.info("🟢 WebSocket connected");
+
+        // =====================================================
+        // HEARTBEAT
+        // =====================================================
+
+        startHeartbeat();
+
+        // =====================================================
+        // RESUBSCRIBE
+        // =====================================================
+
+        Mono<Void> resubscribe =
+                sendAllSubscriptions();
+
+        // =====================================================
+        // RECEIVE TICKS
+        // =====================================================
+
+        Flux<Tick> ticks = session.receive()
+
+                .filter(msg ->
+                        msg.getType() ==
+                        WebSocketMessage.Type.BINARY
+                )
+
+                .mapNotNull(msg ->
+                        decode(msg.getPayload())
+                )
+
+                .filter(t ->
+                        t.oi() >= 1000 &&
+                        t.ltp() >= 0.80
+                )
+
+                .onBackpressureBuffer(
+                        50000,
+                        dropped -> log.warn(
+                                "⚠ Tick dropped"
+                        ),
+                        BufferOverflowStrategy.DROP_OLDEST
+                )
+
+                .doOnError(err ->
+                        log.error(
+                                "❌ WebSocket receive error",
+                                err
+                        )
+                )
+
+                .doFinally(signal ->
+                        log.warn(
+                                "⚠ Receive stream closed {}",
+                                signal
+                        )
+                )
+
+                .onBackpressureBuffer(
+                        50000,
+                        BufferOverflowStrategy.DROP_OLDEST
+                )
+
+                .share();
+
+        // =====================================================
+        // RSI PIPELINE
+        // =====================================================
+
+        Flux<OptionRsi> rsiFlux = ticks
+
+                .flatMap(tick -> {
+
+                    Scheduler scheduler =
+                            resolveScheduler(
+                                    tick.expiry()
+                            );
+
+                    return Mono.fromCallable(() -> {
+
+                                // =========================
+                                // 4 SECOND
+                                // =========================
+
+                                rsiService.onLtp(
+                                        "NIFTY",
+                                        tick.securityId(),
+                                        tick.optionType(),
+                                        tick.ltp(),
+                                        tick.oi(),
+                                        tick.highestOi(),
+                                        tick.atp(),
+                                        4
+                                );
+
+                                // =========================
+                                // 5 SECOND
+                                // =========================
+
+                                return rsiService.onLtp(
+                                        "NIFTY",
+                                        tick.securityId(),
+                                        tick.optionType(),
+                                        tick.ltp(),
+                                        tick.oi(),
+                                        tick.highestOi(),
+                                        tick.atp(),
+                                        5
+                                );
+                            })
+
+                            .subscribeOn(scheduler);
+
+                }, 32)
+
+                .filter(Objects::nonNull)
+
+                .doOnNext(rsi -> {
+
+                    latestRsi.put(
+                            rsi.getSecurityId(),
+                            rsi
+                    );
+
+                    aggregator.add(rsi, 5);
+                })
+
+                .onErrorContinue((err, obj) ->
+
+                        log.error(
+                                "❌ RSI ERROR obj={}",
+                                obj,
+                                err
+                        )
+                )
+
+                .publish()
+
+                .refCount(1);
+
+        // =====================================================
+        // CURRENT EXPIRY ONLY
+        // =====================================================
+
+        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+
+                .filter(rsi ->
+                        store.isCurrentExpiry(
+                                rsi.getExpiry()
+                        )
+                );
+
+        // =====================================================
+        // PROCESSING PIPELINE
+        // =====================================================
+
+        Mono<Void> processing = currentExpiryFlux
+
+                .bufferUntilChanged(
+                        OptionRsi::getCandleTime
+                )
+
+                .concatMap(this::processBatch)
+
+                .then();
+
+        // =====================================================
+        // START PROCESSING
+        // =====================================================
+
+        processing.subscribe(
+
+                null,
+
+                err -> log.error(
+                        "❌ Processing error",
+                        err
+                )
+        );
+
+        // =====================================================
+        // KEEP SOCKET ALIVE
+        // =====================================================
+
+        return resubscribe
+
+                .then(
+                        Mono.<Void>never()
+                )
+
+                .doFinally(signal -> {
+
+                    log.warn(
+                            "🔌 WebSocket disconnected {}",
+                            signal
+                    );
+
+                    this.session = null;
+                });
+    }
+
+    // =========================================================
+    // HEARTBEAT
+    // =========================================================
+
+    private void startHeartbeat() {
+
+        Flux.interval(Duration.ofSeconds(15))
+
+                .flatMap(i -> {
+
+                    if (session != null &&
+                        session.isOpen()) {
+
+                        return session.send(
+
+                                Mono.just(
+
+                                        session.pingMessage(
+                                                f -> f.allocateBuffer(0)
+                                        )
+                                )
+                        );
+                    }
+
+                    return Mono.empty();
+                })
+
+                .onErrorResume(e -> {
+
+                    log.error(
+                            "❌ Heartbeat error",
+                            e
+                    );
+
+                    return Mono.empty();
+                })
+
+                .subscribe();
+    }
+
+    // =========================================================
+    // PROCESS BATCH
+    // =========================================================
+
+    private Mono<Void> processBatch(
+            List<OptionRsi> batch
+    ) {
+
+        return Mono.fromRunnable(() -> {
+
+            try {
+
+                if (batch.isEmpty()) {
+                    return;
+                }
+
+                // =============================================
+                // SNAPSHOT
+                // =============================================
+
+                var snap =
+                        aggregator.snapshot(5);
+
+                double callFlow =
+                        snap.callDpi();
+
+                double putFlow =
+                        snap.putDpi();
+
+                double netFlow =
+                        snap.netDpi();
+
+                // =============================================
+                // TRANSACTION
+                // =============================================
+
+                OptionTransaction callTxn =
+                        transactionRepository
+                                .findByTimeframeAndOptionTypeAndActive(
+                                        "5S",
+                                        "CALL",
+                                        true
+                                )
+                                .orElse(null);
+
+                OptionTransaction putTxn =
+                        transactionRepository
+                                .findByTimeframeAndOptionTypeAndActive(
+                                        "5S",
+                                        "PUT",
+                                        true
+                                )
+                                .orElse(null);
+
+                if (callTxn == null ||
+                    putTxn == null) {
+
+                    return;
+                }
+
+                // =============================================
+                // FIND RSI
+                // =============================================
+
+                OptionRsi call = batch.stream()
+
+                        .filter(r ->
+                                r.getSecurityId() ==
+                                callTxn.getSecurityId()
+                        )
+
+                        .findFirst()
+
+                        .orElse(null);
+
+                OptionRsi put = batch.stream()
+
+                        .filter(r ->
+                                r.getSecurityId() ==
+                                putTxn.getSecurityId()
+                        )
+
+                        .findFirst()
+
+                        .orElse(null);
+
+                if (call == null ||
+                    put == null) {
+
+                    return;
+                }
+
+                // =============================================
+                // COPY
+                // =============================================
+
+                OptionRsi callSave =
+                        new OptionRsi(call);
+
+                OptionRsi putSave =
+                        new OptionRsi(put);
+
+                // =============================================
+                // FLOW
+                // =============================================
+
+                callSave.setCallFlow(callFlow);
+                callSave.setPutFlow(putFlow);
+                callSave.setNetFlow(netFlow);
+
+                putSave.setCallFlow(callFlow);
+                putSave.setPutFlow(putFlow);
+                putSave.setNetFlow(netFlow);
+
+                // =============================================
+                // SIGNAL
+                // =============================================
+
+                FlowSignal callSignal =
+                        signalService.evaluate(
+                                snap,
+                                "CALL",
+                                true,
+                                false
+                        );
+
+                FlowSignal putSignal =
+                        signalService.evaluate(
+                                snap,
+                                "PUT",
+                                false,
+                                true
+                        );
+
+                // =============================================
+                // APPLY SIGNAL
+                // =============================================
+
+                if (callSignal ==
+                    FlowSignal.BUY_CALL) {
+
+                    callSave.setBuy(true);
+                }
+
+                if (callSignal ==
+                    FlowSignal.SELL_CALL) {
+
+                    callSave.setSell(true);
+                }
+
+                if (putSignal ==
+                    FlowSignal.BUY_PUT) {
+
+                    putSave.setBuy(true);
+                }
+
+                if (putSignal ==
+                    FlowSignal.SELL_PUT) {
+
+                    putSave.setSell(true);
+                }
+
+                // =============================================
+                // SAVE ASYNC
+                // =============================================
+
+                saveSink.tryEmitNext(callSave);
+
+                saveSink.tryEmitNext(putSave);
+
+            } catch (Exception e) {
+
+                log.error(
+                        "❌ processBatch failed",
+                        e
+                );
+            }
+
+        }).subscribeOn(
+                Schedulers.boundedElastic()
+        ).then();
+    }
+
+    // =========================================================
+    // SCHEDULER RESOLUTION
+    // =========================================================
+
+    private Scheduler resolveScheduler(
+            LocalDate expiry
+    ) {
+
+        List<LocalDate> expiries =
+                store.allExpiriesSorted();
+
+        if (expiries.isEmpty()) {
+            return currentScheduler;
+        }
+
+        if (expiry.equals(expiries.get(0))) {
+            return currentScheduler;
+        }
+
+        if (expiries.size() > 1 &&
+            expiry.equals(expiries.get(1))) {
+
+            return nextScheduler;
+        }
+
+        return farScheduler;
+    }
+
+    // =========================================================
+    // DECODE
+    // =========================================================
+
+    private Tick decode(DataBuffer buffer) {
+
+        try {
+
+            byte[] bytes =
+                    new byte[
+                            buffer.readableByteCount()
+                    ];
+
+            buffer.read(bytes);
+
+            ByteBuffer bb =
+                    ByteBuffer.wrap(bytes)
+                            .order(ByteOrder.LITTLE_ENDIAN);
+
+            if (bb.remaining() < 43) {
+                return null;
+            }
+
+            bb.getShort();
+            bb.getShort();
+
+            int securityId =
+                    bb.getInt();
+
+            float ltp =
+                    bb.getFloat();
+
+            bb.getShort();
+
+            bb.getInt();
+
+            float atp =
+                    bb.getFloat();
+
+            bb.getInt();
+            bb.getInt();
+            bb.getInt();
+
+            int oi =
+                    bb.getInt();
+
+            int highestOi =
+                    bb.getInt();
+
+            DhanSubscription sub =
+                    store.subscription(
+                            securityId
+                    );
+
+            if (sub == null) {
+                return null;
+            }
+
+            return new Tick(
+
+                    securityId,
+
+                    ltp,
+
+                    oi,
+
+                    highestOi,
+
+                    atp,
+
+                    sub.getOptionType(),
+
+                    sub.getExpiryDate()
+            );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "❌ Decode error",
+                    e
+            );
+
+            return null;
+        }
+    }
+
+    // =========================================================
+    // SUBSCRIBE
+    // =========================================================
+
+    public Mono<Void> subscribe(
+            String exchange,
+            String securityId,
+            String optionType,
+            Integer strike,
+            LocalDate expiry
+    ) {
+
+        store.add(
+                exchange,
+                securityId,
+                optionType,
+                strike,
+                expiry
+        );
+
+        if (session == null ||
+            !session.isOpen()) {
+
+            return Mono.empty();
+        }
+
+        return sendSubscription(
+                exchange,
+                securityId
+        );
+    }
+
+    // =========================================================
+    // SEND ALL SUBSCRIPTIONS
+    // =========================================================
+
+    private Mono<Void> sendAllSubscriptions() {
+
+        return Flux.fromIterable(store.all())
+
+                .delayElements(
+                        Duration.ofMillis(50)
+                )
+
+                .concatMap(sub ->
+
+                        sendSubscription(
+                                sub.getExchange(),
+                                sub.getSecurityId()
+                        )
+                )
+
+                .then();
+    }
+
+    // =========================================================
+    // SEND SUBSCRIPTION
+    // =========================================================
+
+    private Mono<Void> sendSubscription(
+            String exchange,
+            String securityId
+    ) {
+
+        if (session == null ||
+            !session.isOpen()) {
+
+            return Mono.empty();
+        }
+
+        String payload = """
+                {
+                  "RequestCode": 21,
+                  "InstrumentCount": 1,
+                  "InstrumentList": [
+                    {
+                      "ExchangeSegment": "%s",
+                      "SecurityId": "%s"
+                    }
+                  ]
+                }
+                """.formatted(
+                exchange,
+                securityId
+        );
+
+        return session.send(
+
+                Mono.just(
+                        session.textMessage(payload)
+                )
+        )
+
+        .doOnSuccess(v ->
+
+                log.info(
+                        "✅ Subscribed {}",
+                        securityId
+                )
+        )
+
+        .doOnError(e ->
+
+                log.error(
+                        "❌ Subscription failed {}",
+                        securityId,
+                        e
+                )
+        )
+
+        .onErrorResume(e ->
+                Mono.empty()
         );
     }
 }

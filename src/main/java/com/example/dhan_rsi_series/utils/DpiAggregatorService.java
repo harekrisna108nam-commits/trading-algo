@@ -499,9 +499,10 @@ public class DpiAggregatorService {
 
 				bucket.baseCallFlow = safe(flow.getCallFlow());
 				bucket.basePutFlow = safe(flow.getPutFlow());
+				bucket.baseFutureFlow = safe(flow.getFutureFlow());
 
 				System.out.println("✅ Restored Flow | Expiry: " + expiry + " | CALL: " + bucket.baseCallFlow
-						+ " | PUT: " + bucket.basePutFlow);
+						+ " | PUT: " + bucket.basePutFlow + " | FUTURE: " + bucket.baseFutureFlow);
 			}
 
 			System.out.println("✅ MoneyFlow restoration completed");
