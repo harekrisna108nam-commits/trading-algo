@@ -4,11 +4,15 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -19,20 +23,23 @@ import com.example.dhan_rsi_series.entity.DhanSubscription;
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
+import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
 import com.example.dhan_rsi_series.service.CandleRsiService;
+import com.example.dhan_rsi_series.service.DhanFundLimitService;
+import com.example.dhan_rsi_series.service.DhanOrderService;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.Disposable;
 import reactor.core.publisher.BufferOverflowStrategy;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Hooks;
+import reactor.core.publisher.GroupedFlux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.databind.ObjectMapper;
 
 //@Slf4j
 //@Component
@@ -1050,7 +1057,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 }*/
 
 
-/*@Slf4j
+@Slf4j
 @Component
 public class DhanLiveDataHandler implements WebSocketHandler {
 
@@ -1132,27 +1139,265 @@ public class DhanLiveDataHandler implements WebSocketHandler {
     // HANDLE
     // =========================================================
 
+//    @Override
+//    public Mono<Void> handle(WebSocketSession session) {
+//
+//        this.session = session;
+//
+//        Mono<Void> resubscribe = sendAllSubscriptions();
+//
+//        // =====================================================
+//        // RAW TICKS
+//        // =====================================================
+//
+//        Flux<Tick> ticks = session.receive()
+//
+//                .filter(m ->
+//                        m.getType() ==
+//                        WebSocketMessage.Type.BINARY
+//                )
+//
+//                .mapNotNull(m ->
+//                        decode(m.getPayload())
+//                )
+//
+//                .filter(t ->
+//                        t.oi() >= 1000 &&
+//                        t.ltp() >= 0.80
+//                )
+//
+//                .onBackpressureBuffer(
+//                        50000,
+//                        BufferOverflowStrategy.DROP_OLDEST
+//                )
+//
+//                .share();
+//
+//        // =====================================================
+//        // SPLIT BY EXPIRY
+//        // =====================================================
+//
+//        Flux<GroupedFlux<LocalDate, Tick>> grouped =
+//                ticks.groupBy(Tick::expiry);
+//
+//        // =====================================================
+//        // PARALLEL EXPIRY PROCESSING
+//        // =====================================================
+//
+//        Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
+//
+//            LocalDate expiry = group.key();
+//
+//            Scheduler scheduler =
+//                    resolveScheduler(expiry);
+//
+//            log.info(
+//                    "✅ Expiry {} mapped to {}",
+//                    expiry,
+//                    scheduler
+//            );
+//
+//            return group
+//
+//                    // -----------------------------------------
+//                    // DEDICATED CORE
+//                    // -----------------------------------------
+//
+//                    .publishOn(scheduler)
+//
+//                    // -----------------------------------------
+//                    // STRICT ORDER INSIDE EXPIRY
+//                    // -----------------------------------------
+//
+//                    .concatMap(t ->
+//
+//                            Mono.fromCallable(() -> {
+//
+//                                // ============================
+//                                // 4 SECOND GAMMA
+//                                // ============================
+//
+//                                rsiService.onLtp(
+//                                        "NIFTY",
+//                                        t.securityId(),
+//                                        t.optionType(),
+//                                        t.ltp(),
+//                                        t.oi(),
+//                                        t.highestOi(),
+//                                        t.atp(),
+//                                        4
+//                                );
+//
+//                                // ============================
+//                                // 5 SECOND RSI
+//                                // ============================
+//
+//                                return rsiService.onLtp(
+//                                        "NIFTY",
+//                                        t.securityId(),
+//                                        t.optionType(),
+//                                        t.ltp(),
+//                                        t.oi(),
+//                                        t.highestOi(),
+//                                        t.atp(),
+//                                        5
+//                                );
+//                            })
+//
+//                    )
+//
+//                    .filter(Objects::nonNull)
+//
+//                    // -----------------------------------------
+//                    // GLOBAL FLOW
+//                    // ALL EXPIRIES
+//                    // -----------------------------------------
+//
+//                    .doOnNext(rsi -> {
+//
+//                        latestRsi.put(
+//                                rsi.getSecurityId(),
+//                                rsi
+//                        );
+//
+//                        aggregator.add(rsi, 5);
+//                    })
+//
+//                    .doOnError(err ->
+//                            log.error(
+//                                    "❌ RSI ERROR",
+//                                    err
+//                            )
+//                    );
+//
+//        }).publish().refCount(1);
+//
+//        // =====================================================
+//        // FINAL DECISION
+//        // CURRENT EXPIRY ONLY
+//        // =====================================================
+//
+//        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+//
+//                .filter(rsi ->
+//                        store.isCurrentExpiry(
+//                                rsi.getExpiry()
+//                        )
+//                );
+//
+//        Mono<Void> finalDecision = currentExpiryFlux
+//
+//                .bufferUntilChanged(
+//                        OptionRsi::getCandleTime
+//                )
+//
+//                // STRICT ORDER
+//                .concatMap(this::processBatch)
+//
+//                .then();
+//
+//        // =====================================================
+//        // HEARTBEAT
+//        // =====================================================
+//
+//        Mono<Void> heartbeat = session.send(
+//
+//                Flux.interval(Duration.ofSeconds(15))
+//
+//                        .map(i ->
+//                                session.pingMessage(
+//                                        f -> f.allocateBuffer(0)
+//                                )
+//                        )
+//        );
+//
+//        // =====================================================
+//        // FINAL PIPELINE
+//        // =====================================================
+//
+//        return resubscribe.then(
+//
+//                        Mono.when(
+//                                rsiFlux.then(),
+//                                finalDecision,
+//                                heartbeat
+//                        )
+//                )
+//
+//                .takeUntilOther(
+//                        session.closeStatus()
+//                )
+//
+//                .doFinally(s ->
+//                        this.session = null
+//                );
+//    }
+    
     @Override
     public Mono<Void> handle(WebSocketSession session) {
 
         this.session = session;
 
-        Mono<Void> resubscribe = sendAllSubscriptions();
+        log.info("🟢 WebSocket connected");
 
         // =====================================================
-        // RAW TICKS
+        // HEARTBEAT
+        // =====================================================
+
+        Flux<WebSocketMessage> heartbeatFlux =
+
+                Flux.interval(Duration.ofSeconds(15))
+
+                        .map(i -> {
+
+                            log.debug("💓 Sending Ping");
+
+                            return session.pingMessage(
+                                    factory -> factory.allocateBuffer(0)
+                            );
+                        });
+
+        // =====================================================
+        // RECEIVE TICKS
         // =====================================================
 
         Flux<Tick> ticks = session.receive()
 
-                .filter(m ->
-                        m.getType() ==
+                .doOnSubscribe(s ->
+                        log.info("📡 Listening ticks...")
+                )
+
+                .doOnNext(msg ->
+                        log.debug("📩 WS Message Type: {}", msg.getType())
+                )
+
+                .doOnError(err ->
+                        log.error("❌ WebSocket receive error", err)
+                )
+
+                .doOnComplete(() ->
+                        log.warn("🔌 WebSocket disconnected")
+                )
+
+                .filter(msg ->
+                        msg.getType() ==
                         WebSocketMessage.Type.BINARY
                 )
 
-                .mapNotNull(m ->
-                        decode(m.getPayload())
-                )
+                .mapNotNull(msg -> {
+
+                    try {
+                        return decode(msg.getPayload());
+
+                    } catch (Exception e) {
+
+                        log.error("❌ Decode error", e);
+
+                        return null;
+                    }
+                })
+
+                .filter(Objects::nonNull)
 
                 .filter(t ->
                         t.oi() >= 1000 &&
@@ -1161,20 +1406,22 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
                 .onBackpressureBuffer(
                         50000,
+                        dropped ->
+                                log.warn("⚠ Tick dropped"),
                         BufferOverflowStrategy.DROP_OLDEST
                 )
 
                 .share();
 
         // =====================================================
-        // SPLIT BY EXPIRY
+        // GROUP BY EXPIRY
         // =====================================================
 
         Flux<GroupedFlux<LocalDate, Tick>> grouped =
                 ticks.groupBy(Tick::expiry);
 
         // =====================================================
-        // PARALLEL EXPIRY PROCESSING
+        // RSI PIPELINE
         // =====================================================
 
         Flux<OptionRsi> rsiFlux = grouped.flatMap(group -> {
@@ -1192,24 +1439,13 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
             return group
 
-                    // -----------------------------------------
-                    // DEDICATED CORE
-                    // -----------------------------------------
-
                     .publishOn(scheduler)
-
-                    // -----------------------------------------
-                    // STRICT ORDER INSIDE EXPIRY
-                    // -----------------------------------------
 
                     .concatMap(t ->
 
                             Mono.fromCallable(() -> {
 
-                                // ============================
-                                // 4 SECOND GAMMA
-                                // ============================
-
+                                // 4 SEC
                                 rsiService.onLtp(
                                         "NIFTY",
                                         t.securityId(),
@@ -1221,10 +1457,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                                         4
                                 );
 
-                                // ============================
-                                // 5 SECOND RSI
-                                // ============================
-
+                                // 5 SEC
                                 return rsiService.onLtp(
                                         "NIFTY",
                                         t.securityId(),
@@ -1235,16 +1468,11 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                                         t.atp(),
                                         5
                                 );
-                            })
 
+                            }).subscribeOn(scheduler)
                     )
 
                     .filter(Objects::nonNull)
-
-                    // -----------------------------------------
-                    // GLOBAL FLOW
-                    // ALL EXPIRIES
-                    // -----------------------------------------
 
                     .doOnNext(rsi -> {
 
@@ -1258,72 +1486,81 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
                     .doOnError(err ->
                             log.error(
-                                    "❌ RSI ERROR",
+                                    "❌ RSI Processing Error",
                                     err
                             )
                     );
 
-        }).publish().refCount(1);
+        });
 
         // =====================================================
         // FINAL DECISION
-        // CURRENT EXPIRY ONLY
         // =====================================================
 
-        Flux<OptionRsi> currentExpiryFlux = rsiFlux
+        Mono<Void> finalDecision = rsiFlux
 
                 .filter(rsi ->
                         store.isCurrentExpiry(
                                 rsi.getExpiry()
                         )
-                );
+                )
 
-        Mono<Void> finalDecision = currentExpiryFlux
+                .doOnNext(rsi ->
+                        log.info(
+                                "🔥 FINAL RSI {} {}",
+                                rsi.getSecurityId(),
+                                rsi.getClose()
+                        )
+                )
 
                 .bufferUntilChanged(
                         OptionRsi::getCandleTime
                 )
 
-                // STRICT ORDER
                 .concatMap(this::processBatch)
 
                 .then();
 
         // =====================================================
-        // HEARTBEAT
+        // RESUBSCRIBE
         // =====================================================
 
-        Mono<Void> heartbeat = session.send(
+        Mono<Void> subscribeMono = sendAllSubscriptions()
 
-                Flux.interval(Duration.ofSeconds(15))
-
-                        .map(i ->
-                                session.pingMessage(
-                                        f -> f.allocateBuffer(0)
-                                )
-                        )
-        );
+                .doOnSuccess(v ->
+                        log.info("✅ All subscriptions restored")
+                );
 
         // =====================================================
-        // FINAL PIPELINE
+        // SEND HEARTBEAT
         // =====================================================
 
-        return resubscribe.then(
+        Mono<Void> heartbeatMono =
+                session.send(heartbeatFlux);
+
+        // =====================================================
+        // FINAL
+        // =====================================================
+
+        return subscribeMono.then(
 
                         Mono.when(
-                                rsiFlux.then(),
+
                                 finalDecision,
-                                heartbeat
+
+                                heartbeatMono
                         )
                 )
 
-                .takeUntilOther(
-                        session.closeStatus()
-                )
+                .doFinally(signal -> {
 
-                .doFinally(s ->
-                        this.session = null
-                );
+                    log.warn(
+                            "🔌 WebSocket closed {}",
+                            signal
+                    );
+
+                    this.session = null;
+                });
     }
 
     // =========================================================
@@ -1943,9 +2180,9 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                 )
         );
     }
-}*/
+}
 
-@Slf4j
+/*@Slf4j
 @Component
 public class DhanLiveDataHandler implements WebSocketHandler {
 
@@ -2724,4 +2961,4 @@ public class DhanLiveDataHandler implements WebSocketHandler {
                 Mono.empty()
         );
     }
-}
+}*/
