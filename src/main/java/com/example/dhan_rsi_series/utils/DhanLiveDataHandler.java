@@ -2213,6 +2213,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 	private final Scheduler nextExpiryScheduler4 = Schedulers.newSingle("NEXT-EXPIRY-4");
 
+	private final Scheduler nextExpiryScheduler5 = Schedulers.newSingle("NEXT-EXPIRY-5");
+
+	private final Scheduler nextExpiryScheduler6 = Schedulers.newSingle("NEXT-EXPIRY-6");
+	
 	private final Scheduler farExpiryScheduler = Schedulers.newSingle("FAR-EXPIRY");
 
 	// =========================================================
@@ -2608,6 +2612,14 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 		if (expiries.size() > 5 && expiry.equals(expiries.get(5))) {
 			return nextExpiryScheduler4;
+		}
+		
+		if (expiries.size() > 6 && expiry.equals(expiries.get(6))) {
+			return nextExpiryScheduler5;
+		}
+
+		if (expiries.size() > 7 && expiry.equals(expiries.get(7))) {
+			return nextExpiryScheduler6;
 		}
 
 		return farExpiryScheduler;
