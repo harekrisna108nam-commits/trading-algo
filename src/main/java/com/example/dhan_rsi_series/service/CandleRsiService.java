@@ -2,7 +2,9 @@ package com.example.dhan_rsi_series.service;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -13,8 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
 import com.example.dhan_rsi_series.entity.DhanSubscription;
+import com.example.dhan_rsi_series.entity.OptionChain;
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.repository.DhanSubscriptionRepository;
+import com.example.dhan_rsi_series.repository.OptionChainRepository;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.utils.CandleSnapshot;
 import com.example.dhan_rsi_series.utils.CandleState;
@@ -1525,6 +1529,7 @@ public class CandleRsiService {
 public class CandleRsiService {
 
     private final OptionRsiRepository repo;
+    private final OptionChainRepository optionChainRepository;
     private final DhanSubscriptionRepository subscriptionRepository;
 
     // ================= CANDLE =================
@@ -1544,11 +1549,15 @@ public class CandleRsiService {
     private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityPut  = new ConcurrentHashMap<>();
 
     public final Map<Integer, OptionRsi> latestMap = new ConcurrentHashMap<>();
-
+    private final Map<String, Boolean> isGammaPresent  = new ConcurrentHashMap<>();
+    private final Map<String, Double> getGammaByKey = new ConcurrentHashMap<>();
+    private final Map<String, Double> getPreviousLtpByKey = new ConcurrentHashMap<>();
     public CandleRsiService(OptionRsiRepository repo,
-                            DhanSubscriptionRepository subscriptionRepository) {
+                            DhanSubscriptionRepository subscriptionRepository,
+                            OptionChainRepository optionChainRepository) {
         this.repo = repo;
         this.subscriptionRepository = subscriptionRepository;
+        this.optionChainRepository = optionChainRepository;
     }
 
     // =========================================================
@@ -1556,15 +1565,20 @@ public class CandleRsiService {
     // =========================================================
     @PostConstruct
     public void loadSubscriptions() {
+    	
+    	List<OptionChain> optionChainList = optionChainRepository.findLatestRecordForEachSecurityId();
 
+    	
         List<DhanSubscription> list = subscriptionRepository.findByActiveTrue();
 
-        list.stream().forEach(s -> {
-
+        list.parallelStream().forEach(s -> {
+        	String key = "NIFTY" + "_" + s.getSecurityId() + "_5";
             int strike = (int) s.getStrike();
             int secId  = Integer.parseInt(s.getSecurityId());
 
             securityToStrikeMap.put(secId, s);
+            
+            isGammaPresent.put(key, false);
 
             if ("CALL".equalsIgnoreCase(s.getOptionType())) {
 
@@ -1583,6 +1597,18 @@ public class CandleRsiService {
                         .put(strike, secId);
             }
         });
+        
+        if (!optionChainList.isEmpty()) {
+    		optionChainList.parallelStream().peek(op->{
+    			String key = op.getSymbol() + "_" + op.getSecurityId() + "_5";
+    			lastOiMap.put(key, op.getOi());
+    			isGammaPresent.put(key, true);
+    			getGammaByKey.put(key, op.getGamma());
+    			getPreviousLtpByKey.put(key, op.getClose());
+    		});
+    		
+    		
+        }
 
         log.info("✅ Loaded {} subscriptions into memory", list.size());
     }
@@ -1612,7 +1638,7 @@ public class CandleRsiService {
         // =====================================================
         // 🔥 4 SEC → GAMMA ENGINE
         // =====================================================
-        if (!optionType.equalsIgnoreCase("FUTURE") && timeframeSeconds == 4) {
+        if (!isGammaPresent.get(key) && !optionType.equalsIgnoreCase("FUTURE") && timeframeSeconds == 4) {
 
             OptionRsi rsi4 = new OptionRsi();
             rsi4.setSecurityId(securityId);
@@ -1753,14 +1779,19 @@ public class CandleRsiService {
 
         String key = symbol + "_" + securityId + "_5";
 
-        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0113 : selectedGammaMap.getOrDefault(securityId, 0.0);
+        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0113 : isGammaPresent.get(key) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
 
         Integer prevOi = lastOiMap.getOrDefault(key, oi);
         int deltaOi = oi - prevOi;
+        
+        double prevLtp = c.avgLtp();
+        if (isGammaPresent.get(key)) {
+        	prevLtp = getPreviousLtpByKey.get(key);
+        }
 
-        double sign = (c.close() > c.avgLtp()) ? 1 : -1;
+        double sign = (c.close() > prevLtp) ? 1 : -1;
 
-        double dpi = sign * Math.abs(deltaOi) * gamma * c.avgLtp();
+        double dpi = sign * Math.abs(deltaOi) * gamma * prevLtp;
         double weightedOi = sign * Math.abs(deltaOi) * gamma;
 
         lastOiMap.put(key, oi);
@@ -1793,6 +1824,27 @@ public class CandleRsiService {
         e.setExpiry(expiry);
 
         latestMap.put(securityId, e);
+        
+        OptionChain optionChain = OptionChain.builder()
+        .id(e.getSymbol().toUpperCase() + e.getSecurityId()+LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")))
+        .symbol(e.getSymbol())
+        .securityId(e.getSecurityId())
+        .open(e.getOpen())
+        .low(e.getLow())
+        .high(e.getHigh())
+        .close(e.getClose())
+        .atp(e.getAtp())
+        .dpi(e.getDpi())
+        .gamma(e.getGamma())
+        .expiry(e.getExpiry())
+        .candleTime(e.getCandleTime())
+        .build();
+        
+        log.info("Option Chain:: {}", optionChain);
+        
+        optionChainRepository.save(optionChain);
+        
+        isGammaPresent.put(key, false);
 
         return e;
     }
