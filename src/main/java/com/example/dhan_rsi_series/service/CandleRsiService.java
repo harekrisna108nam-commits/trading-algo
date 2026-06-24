@@ -1620,6 +1620,7 @@ public class CandleRsiService {
 
         long now = System.currentTimeMillis() / 1000;
         String key = symbol + "_" + securityId + "_" + timeframeSeconds;
+        String key1 = symbol + "_" + securityId + "_5" ;
 
         CandleState candle = candleMap.computeIfAbsent(
                 key, k -> new CandleState(timeframeSeconds)
@@ -1638,7 +1639,7 @@ public class CandleRsiService {
         // =====================================================
         // 🔥 4 SEC → GAMMA ENGINE
         // =====================================================
-        if (isGammaPresent.get(key)!=null && !isGammaPresent.get(key) && !optionType.equalsIgnoreCase("FUTURE") && timeframeSeconds == 4) {
+        if ((isGammaPresent.get(key1)!=null && !isGammaPresent.get(key1)) && !optionType.equalsIgnoreCase("FUTURE") && timeframeSeconds == 4) {
 
             OptionRsi rsi4 = new OptionRsi();
             rsi4.setSecurityId(securityId);
@@ -1779,7 +1780,7 @@ public class CandleRsiService {
 
         String key = symbol + "_" + securityId + "_5";
 
-        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0678 : isGammaPresent.get(key)!=null && isGammaPresent.get(key) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
+        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0678 : (isGammaPresent.get(key)!=null && isGammaPresent.get(key)) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
 
         Integer prevOi = lastOiMap.getOrDefault(key, oi);
         int deltaOi = oi - prevOi;
