@@ -1779,7 +1779,7 @@ public class CandleRsiService {
 
         String key = symbol + "_" + securityId + "_5";
 
-        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0113 : isGammaPresent.get(key) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
+        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0678 : isGammaPresent.get(key) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
 
         Integer prevOi = lastOiMap.getOrDefault(key, oi);
         int deltaOi = oi - prevOi;
@@ -1829,10 +1829,13 @@ public class CandleRsiService {
         .id(e.getSymbol().toUpperCase() + e.getSecurityId()+LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")))
         .symbol(e.getSymbol())
         .securityId(e.getSecurityId())
+        .optionType(e.getOptionType())
         .open(e.getOpen())
         .low(e.getLow())
         .high(e.getHigh())
         .close(e.getClose())
+        .oi(e.getOi())
+        .highestOi(e.getHighestOi())
         .atp(e.getAtp())
         .dpi(e.getDpi())
         .gamma(e.getGamma())
