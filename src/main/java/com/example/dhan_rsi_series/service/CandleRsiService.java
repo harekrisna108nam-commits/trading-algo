@@ -1782,6 +1782,8 @@ public class CandleRsiService {
 
         double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0678 : (isGammaPresent.get(key)!=null && isGammaPresent.get(key)) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
 
+        gamma = gamma > 1 ? 1 : gamma;
+        
         Integer prevOi = lastOiMap.getOrDefault(key, oi);
         int deltaOi = oi - prevOi;
         
@@ -1846,7 +1848,11 @@ public class CandleRsiService {
         
         log.info("Option Chain:: {}", optionChain);
         
-        optionChainRepository.save(optionChain);
+        //LocalDateTime today328PM = LocalDate.now().atTime(15, 28);
+
+        //if (!optionChain.getCandleTime().isBefore(today328PM)) {
+            optionChainRepository.save(optionChain);  //here optionChain save should be parralel or asyncronous because of every 5 sec every security id's record save so time cost may be increased
+        //}
         
         isGammaPresent.put(key, false);
 

@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
@@ -112,12 +113,14 @@ public class FlowSignalService {
 
 	private final OptionTransactionRepository repository;
 
-	public FlowSignal evaluate(DpiAggregatorService.Snapshot snap, String optionType, boolean callBuy, boolean putBuy) {
+	public FlowSignal evaluate(DpiAggregatorService.Snapshot snap, OptionRsi optionRsi, OptionRsi optionRsiPrev, String optionType, boolean callBuy, boolean putBuy) {
 
-		double callFlow = snap.callDpi();
-		double putFlow = snap.putDpi();
-		double netFlow = snap.netDpi();
-		double wtOi = snap.weightedOi();
+//		double currCallDpi = snap.currCallDpi();
+//		double currPutDpi = snap.currPutDpi();
+//		double prevCallDpi = snap.prevCallDpi();
+//		double prevPutDpi = snap.prevPutDpi();
+//		double netFlow = snap.netDpi();
+//		double wtOi = snap.weightedOi();
 
 		// =====================================================
 		// CALL LOGIC
@@ -138,10 +141,30 @@ public class FlowSignalService {
 //                return FlowSignal.BUY_CALL;
 //            }
 
-			if (netFlow > 0 && isEnableBuy) {
+//			if (netFlow > 0 && isEnableBuy) {
+//
+//				return FlowSignal.BUY_CALL;
+//			}
+			
+			if (optionRsi.getHigh()>optionRsi.getOpen() 
+					&& optionRsi.getLow()>=0.95*optionRsi.getOpen()
+					&& optionRsi.getClose()>optionRsi.getOpen()
+					&& optionRsi.getPutFlow() < optionRsiPrev.getPutFlow() && isEnableBuy) {
 
 				return FlowSignal.BUY_CALL;
 			}
+			
+			if (optionRsi.getHigh()==optionRsi.getOpen() 
+					&& optionRsi.getLow()<=0.95*optionRsi.getOpen()
+					&& optionRsi.getClose()<optionRsi.getOpen()
+					&& optionRsi.getOpen()<=optionRsiPrev.getClose()
+					&& optionRsi.getClose()<=optionRsiPrev.getClose()
+					&& optionRsi.getPutFlow() > optionRsiPrev.getPutFlow()  && isEnableSell ) {
+
+				return FlowSignal.SELL_CALL;
+			}
+			
+			
 
 			// SELL CALL
 //            if ((callFlow<0 && putFlow<0 && netFlow <=0)
@@ -151,10 +174,10 @@ public class FlowSignalService {
 //            }
 
 			//if (netFlow < 0 && isEnableSell) { //later you have to work
-			if (netFlow < 0 && isEnableSell) {
-
-				return FlowSignal.SELL_CALL;
-			}
+//			if (netFlow < 0 && isEnableSell) {
+//
+//				return FlowSignal.SELL_CALL;
+//			}
 		}
 
 		// =====================================================
@@ -176,10 +199,10 @@ public class FlowSignalService {
 //                return FlowSignal.BUY_PUT;
 //            }
 
-			if (netFlow < 0 && isEnableBuy) {
-
-				return FlowSignal.BUY_PUT;
-			}
+//			if (netFlow < 0 && isEnableBuy) {
+//
+//				return FlowSignal.BUY_PUT;
+//			}
 
 			// SELL PUT
 //        	if ((callFlow<0 && putFlow<0 && netFlow >=0)
@@ -189,7 +212,25 @@ public class FlowSignalService {
 //            }
 
 			//if (netFlow > 0 && isEnableSell) { // later you have to work
-			if (netFlow > 0 && isEnableSell) {
+//			if (netFlow > 0 && isEnableSell) {
+//
+//				return FlowSignal.SELL_PUT;
+//			}
+			
+			if (optionRsi.getHigh()>optionRsi.getOpen() 
+					&& optionRsi.getLow()>=0.95*optionRsi.getOpen()
+					&& optionRsi.getClose()>optionRsi.getOpen()
+					&& optionRsi.getCallFlow() < optionRsiPrev.getCallFlow() && isEnableBuy) {
+
+				return FlowSignal.BUY_PUT;
+			}
+			
+			if (optionRsi.getHigh()==optionRsi.getOpen() 
+					&& optionRsi.getLow()<=0.95*optionRsi.getOpen()
+					&& optionRsi.getClose()<optionRsi.getOpen()
+					&& optionRsi.getOpen()<=optionRsiPrev.getClose()
+					&& optionRsi.getClose()<=optionRsiPrev.getClose()
+					&& optionRsi.getCallFlow() > optionRsiPrev.getCallFlow()  && isEnableSell ) {
 
 				return FlowSignal.SELL_PUT;
 			}

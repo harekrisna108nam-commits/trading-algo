@@ -2196,6 +2196,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	// =========================================================
 
 	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
+	private final Map<Integer, OptionRsi> lastRsi = new ConcurrentHashMap<>();
 
 	// =========================================================
 	// EXPIRY THREADS
@@ -2421,11 +2422,15 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 			var snap = aggregator.snapshot(5);
 
-			double callFlow = snap.callDpi();
-			double putFlow = snap.putDpi();
+			double prevCallDpi = snap.prevCallDpi();
+			double prevPutDpi = snap.prevPutDpi();
+			double currCallDpi = snap.currCallDpi();
+			double currPutDpi = snap.currPutDpi();
 			double netFlow = snap.netDpi();
+			
+			log.info("📊 FLOW previous CALL={} PUT={} NET={}", prevCallDpi, prevPutDpi, netFlow);
 
-			log.info("📊 FLOW CALL={} PUT={} NET={}", callFlow, putFlow, netFlow);
+			log.info("📊 FLOW current CALL={} PUT={} NET={}", currCallDpi, currPutDpi, netFlow);
 
 			// =================================================
 			// TXN
@@ -2471,12 +2476,12 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			OptionRsi callSave = new OptionRsi(call);
 			OptionRsi putSave = new OptionRsi(put);
 
-			callSave.setCallFlow(callFlow);
-			callSave.setPutFlow(putFlow);
+			callSave.setCallFlow(currCallDpi);
+			callSave.setPutFlow(currPutDpi);
 			callSave.setNetFlow(netFlow);
 
-			putSave.setCallFlow(callFlow);
-			putSave.setPutFlow(putFlow);
+			putSave.setCallFlow(currCallDpi);
+			putSave.setPutFlow(currPutDpi);
 			putSave.setNetFlow(netFlow);
 
 			// ================= BUY LOGIC =================
@@ -2491,8 +2496,8 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			boolean putBuy = false;
 
 			// ================= SIGNAL =================
-			FlowSignal callSignal = signalService.evaluate(snap, "CALL", callBuy, putBuy);
-			FlowSignal putSignal = signalService.evaluate(snap, "PUT", callBuy, putBuy);
+			FlowSignal callSignal = signalService.evaluate(snap, callSave, lastRsi.getOrDefault(callSave.getSecurityId(), callSave), "CALL", callBuy, putBuy);
+			FlowSignal putSignal = signalService.evaluate(snap, putSave, lastRsi.getOrDefault(putSave.getSecurityId(), putSave), "PUT", callBuy, putBuy);
 
 			// ================= APPLY SIGNAL TO RSI =================
 			executeCallSignal(callSignal, callSave, Optional.of(callTxn));
@@ -2504,6 +2509,9 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 			// ================= SAVE =================
 			rsiRepository.saveAll(List.of(callSave, putSave));
+			
+			lastRsi.put(callSave.getSecurityId(), callSave);
+			lastRsi.put(putSave.getSecurityId(), putSave);
 
 			log.info("✅ SAVED");
 

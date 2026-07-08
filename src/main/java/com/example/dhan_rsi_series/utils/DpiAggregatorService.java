@@ -561,7 +561,7 @@ public class DpiAggregatorService {
 		ConcurrentHashMap<LocalDate, Bucket> expiryMap = buckets.get(tf);
 
 		if (expiryMap == null || expiryMap.isEmpty()) {
-			return new Snapshot(0, 0, 0, 0, 0, 0);
+			return new Snapshot(0, 0, 0, 0, 0, 0, 0, 0);
 		}
 
 		double totalCallFlow = 0;
@@ -570,9 +570,16 @@ public class DpiAggregatorService {
 
 		double totalCallOi = 0;
 		double totalPutOi = 0;
+		
+		double totalPrevCallFlow = 0;
+		double totalPrevPutFlow = 0;
 
 		// ✅ SUM ALL EXPIRIES
 		for (Bucket bucket : expiryMap.values()) {
+			
+			totalPrevCallFlow += bucket.baseCallFlow;
+			
+			totalPrevPutFlow += bucket.basePutFlow;
 
 			totalCallFlow += bucket.baseCallFlow + bucket.callDpi.sum();
 			totalPutFlow += bucket.basePutFlow + bucket.putDpi.sum();
@@ -582,7 +589,7 @@ public class DpiAggregatorService {
 			totalPutOi += bucket.putWeightedOi.sum();
 		}
 
-		return new Snapshot(totalCallFlow, totalPutFlow, totalFutureFlow, totalCallOi, totalPutOi, totalCallOi - totalPutOi);
+		return new Snapshot(totalCallFlow, totalPutFlow, totalPrevCallFlow, totalPrevPutFlow, totalFutureFlow, totalCallOi, totalPutOi, totalCallOi - totalPutOi);
 	}
 	
 	// =========================================================
@@ -680,11 +687,11 @@ public class DpiAggregatorService {
 	// =========================================================
 	// SNAPSHOT MODEL
 	// =========================================================
-	public record Snapshot(double callDpi, double putDpi, double futureDpi, double callWeightedOi, double putWeightedOi,
+	public record Snapshot(double currCallDpi, double currPutDpi, double prevCallDpi, double prevPutDpi, double futureDpi, double callWeightedOi, double putWeightedOi,
 			double weightedOi) {
 
 		public double netDpi() {
-			return (callDpi - putDpi) + (futureDpi);
+			return (currCallDpi - currPutDpi) + (futureDpi);
 		}
 	}
 
