@@ -41,12 +41,12 @@ public class NewFlowSignalService {
     
 	public FlowSignal evaluate(DpiAggregatorService.Snapshot snap, OptionRsi e, OptionRsi optionRsiPrev, String optionType, boolean callBuy, boolean putBuy) {
 
-        //====================================================================
+        //=====================================================================
         //---------------------------------CALL--------------------------------
-        //====================================================================
+        //=====================================================================
 		
 		//0. First time set the value
-        if (firstTimeExecution.get(callKey)) {
+        if (firstTimeExecution.getOrDefault(callKey, true)) {
         	callBaseBucket.put(callKey, e);
             
             callBuyingBucket.put(callKey, e);
@@ -56,9 +56,9 @@ public class NewFlowSignalService {
         
         //1. Call Base line Bucket replacement
         
-        boolean closeCondition =  (callBaseBucket.get(callKey).getClose()>=e.getClose());
-        boolean putFlowCondition =  (e.getPutFlow() >= callBaseBucket.get(callKey).getPutFlow());
-        boolean netFlowCondition =  (e.getNetFlow() <= callBaseBucket.get(callKey).getNetFlow());
+        boolean closeCondition =  (callBaseBucket.getOrDefault(callKey, e).getClose()>=e.getClose());
+        boolean putFlowCondition =  (e.getPutFlow() >= callBaseBucket.getOrDefault(callKey, e).getPutFlow());
+        boolean netFlowCondition =  (e.getNetFlow() <= callBaseBucket.getOrDefault(callKey, e).getNetFlow());
         
         if ( closeCondition & putFlowCondition & netFlowCondition ) {
         	callBaseBucket.put(callKey, e);
@@ -66,17 +66,17 @@ public class NewFlowSignalService {
         
         
         //2. Call Buying Bucket replacement
-        boolean callBuyingCloseCondition =  (callBuyingBucket.get(callKey).getClose()>e.getClose());
-        boolean callBuyingPutFlowCondition =  (e.getPutFlow() < callBuyingBucket.get(callKey).getPutFlow());
-        boolean callBuyingNetFlowCondition =  (e.getNetFlow() >= callBaseBucket.get(callKey).getNetFlow());
+        boolean callBuyingCloseCondition =  (callBuyingBucket.getOrDefault(callKey, e).getClose()>e.getClose());
+        boolean callBuyingPutFlowCondition =  (e.getPutFlow() < callBuyingBucket.getOrDefault(callKey, e).getPutFlow());
+        boolean callBuyingNetFlowCondition =  (e.getNetFlow() >= callBaseBucket.getOrDefault(callKey, e).getNetFlow());
         
         if ( callBuyingCloseCondition & callBuyingPutFlowCondition & callBuyingNetFlowCondition ) {
         	callBuyingBucket.put(callKey, e);
         }
         
-        rocPutflow = (callBaseBucket.get(callKey).getPutFlow() - e.getPutFlow()) / Math.abs(callBaseBucket.get(callKey).getPutFlow());
+        rocPutflow = (callBaseBucket.getOrDefault(callKey, e).getPutFlow() - e.getPutFlow()) / Math.abs(callBaseBucket.getOrDefault(callKey, e).getPutFlow());
         
-        rocCallflow = (callBaseBucket.get(callKey).getCallFlow() - e.getCallFlow()) / Math.abs(callBaseBucket.get(callKey).getCallFlow());
+        rocCallflow = (callBaseBucket.getOrDefault(callKey, e).getCallFlow() - e.getCallFlow()) / Math.abs(callBaseBucket.getOrDefault(callKey, e).getCallFlow());
         
         //3. Call Buying Execution
         
@@ -84,14 +84,14 @@ public class NewFlowSignalService {
         boolean rateFlowCondition = rocPutflow > rocCallflow;
         
         if (rateFlowCondition & currCloseOpenCondition & closeCondition & callBuyingPutFlowCondition & callBuyingNetFlowCondition ) {
-        	callSellingBucket.put(callKey, callBuyingBucket.get(callKey));
+        	callSellingBucket.put(callKey, callBuyingBucket.getOrDefault(callKey, e));
         	return FlowSignal.BUY_CALL;
         }
         
         //4. Call Selling Bucket replacement
-        boolean callSellingCloseCondition =  (callSellingBucket.get(callKey).getClose()<=e.getClose());
-        boolean callSellingPutFlowCondition =  (e.getPutFlow() >= callSellingBucket.get(callKey).getPutFlow());
-        boolean callSellingNetFlowCondition =  (e.getNetFlow() >= callBaseBucket.get(callKey).getNetFlow());
+        boolean callSellingCloseCondition =  (callSellingBucket.getOrDefault(callKey, e).getClose()<=e.getClose());
+        boolean callSellingPutFlowCondition =  (e.getPutFlow() >= callSellingBucket.getOrDefault(callKey, e).getPutFlow());
+        boolean callSellingNetFlowCondition =  (e.getNetFlow() >= callBaseBucket.getOrDefault(callKey, e).getNetFlow());
         
         if ( callSellingCloseCondition & callSellingPutFlowCondition & callSellingNetFlowCondition ) {
         	callSellingBucket.put(callKey, e);
@@ -104,7 +104,7 @@ public class NewFlowSignalService {
 
         
         if (currCloseOpenConditionForSelling & callSellingCloseCondition & callSellingPutFlowCondition & callSellingNetFlowCondition ) {
-        	callBuyingBucket.put(callKey, callSellingBucket.get(callKey));
+        	callBuyingBucket.put(callKey, callSellingBucket.getOrDefault(callKey, e));
         	return FlowSignal.SELL_CALL;
         }
         
@@ -113,7 +113,7 @@ public class NewFlowSignalService {
         //====================================================================
         
         //0. First time set the value
-        if (firstTimeExecution.get(putKey)) {
+        if (firstTimeExecution.getOrDefault(putKey, true)) {
         	putBaseBucket.put(putKey, e);
             
             putBuyingBucket.put(putKey, e);
@@ -123,9 +123,9 @@ public class NewFlowSignalService {
         
         //1. Put Base line Bucket replacement
         
-        boolean putCloseCondition =  (putBuyingBucket.get(putKey).getClose()>=e.getClose());
-        boolean callFlowCondition =  (e.getCallFlow() >= putBaseBucket.get(putKey).getCallFlow());
-        boolean netFlowConditionForPut =  (e.getNetFlow() >= putBaseBucket.get(putKey).getCallFlow());
+        boolean putCloseCondition =  (putBuyingBucket.getOrDefault(putKey, e).getClose()>=e.getClose());
+        boolean callFlowCondition =  (e.getCallFlow() >= putBaseBucket.getOrDefault(putKey, e).getCallFlow());
+        boolean netFlowConditionForPut =  (e.getNetFlow() >= putBaseBucket.getOrDefault(putKey, e).getCallFlow());
         
         if ( putCloseCondition & callFlowCondition & netFlowConditionForPut ) {
         	putBaseBucket.put(putKey, e);
@@ -133,30 +133,30 @@ public class NewFlowSignalService {
         
         //2. Put Buying Bucket replacement
         //boolean putBuyingCloseCondition =  (putBuyingBucket.get(putKey).getClose()>=e.getClose());
-        boolean putBuyingCallFlowCondition =  (e.getCallFlow() < putBuyingBucket.get(putKey).getCallFlow());
-        boolean putBuyingNetFlowCondition =  (e.getNetFlow() <= putBaseBucket.get(putKey).getNetFlow());
+        boolean putBuyingCallFlowCondition =  (e.getCallFlow() < putBuyingBucket.getOrDefault(putKey, e).getCallFlow());
+        boolean putBuyingNetFlowCondition =  (e.getNetFlow() <= putBaseBucket.getOrDefault(putKey, e).getNetFlow());
         
         if ( putCloseCondition & putBuyingCallFlowCondition & putBuyingNetFlowCondition ) {
         	putBuyingBucket.put(putKey, e);
         }
         
-        rocPutflow = (putBaseBucket.get(putKey).getPutFlow() - e.getPutFlow()) / Math.abs(putBaseBucket.get(putKey).getPutFlow());
+        rocPutflow = (putBaseBucket.getOrDefault(putKey, e).getPutFlow() - e.getPutFlow()) / Math.abs(putBaseBucket.getOrDefault(putKey, e).getPutFlow());
         
-        rocCallflow = (putBaseBucket.get(putKey).getCallFlow() - e.getCallFlow()) / Math.abs(putBaseBucket.get(putKey).getCallFlow());
+        rocCallflow = (putBaseBucket.getOrDefault(putKey, e).getCallFlow() - e.getCallFlow()) / Math.abs(putBaseBucket.getOrDefault(putKey, e).getCallFlow());
         
         //3. Put Buying Execution
 
         boolean rateFlowConditionForPut = rocPutflow < rocCallflow;
         
         if (rateFlowConditionForPut & currCloseOpenCondition & putCloseCondition & putBuyingCallFlowCondition & putBuyingNetFlowCondition ) {
-        	putSellingBucket.put(putKey, putBuyingBucket.get(putKey));
+        	putSellingBucket.put(putKey, putBuyingBucket.getOrDefault(putKey, e));
         	return FlowSignal.BUY_PUT;
         }
         
         //4. Put Selling Bucket replacement
-        boolean putSellingCloseCondition =  (putBuyingBucket.get(putKey).getClose()<=e.getClose());
-        boolean putSellingCallFlowCondition =  (e.getCallFlow() >= putBuyingBucket.get(putKey).getCallFlow());
-        boolean putSellingNetFlowCondition =  (e.getNetFlow() <= putBuyingBucket.get(putKey).getNetFlow());
+        boolean putSellingCloseCondition =  (putBuyingBucket.getOrDefault(putKey, e).getClose()<=e.getClose());
+        boolean putSellingCallFlowCondition =  (e.getCallFlow() >= putBuyingBucket.getOrDefault(putKey, e).getCallFlow());
+        boolean putSellingNetFlowCondition =  (e.getNetFlow() <= putBuyingBucket.getOrDefault(putKey, e).getNetFlow());
         
         if ( putSellingCloseCondition & putSellingCallFlowCondition & putSellingNetFlowCondition ) {
         	putSellingBucket.put(putKey, e);
@@ -169,7 +169,7 @@ public class NewFlowSignalService {
 
         
         if (currCloseOpenConditionForSelling & putSellingCloseCondition & putSellingCallFlowCondition & putSellingNetFlowCondition ) {
-        	putBuyingBucket.put(putKey, putSellingBucket.get(putKey));
+        	putBuyingBucket.put(putKey, putSellingBucket.getOrDefault(putKey, e));
         	return FlowSignal.SELL_PUT;
         }
 		return FlowSignal.HOLD;
