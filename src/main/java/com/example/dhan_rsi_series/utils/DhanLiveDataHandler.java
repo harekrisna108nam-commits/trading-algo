@@ -2185,7 +2185,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	private final CandleRsiService rsiService;
 	private final DhanSubscriptionStore store;
 	private final DpiAggregatorService aggregator;
-	private final FlowSignalService signalService;
+	private final NewFlowSignalService signalService;
 	private final OptionRsiRepository rsiRepository;
 	private final OptionTransactionRepository transactionRepository;
 
@@ -2223,7 +2223,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	// =========================================================
 
 	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
-			DpiAggregatorService aggregator, FlowSignalService signalService, OptionRsiRepository rsiRepository,
+			DpiAggregatorService aggregator, NewFlowSignalService signalService, OptionRsiRepository rsiRepository,
 			OptionTransactionRepository transactionRepository) {
 
 		this.rsiService = rsiService;

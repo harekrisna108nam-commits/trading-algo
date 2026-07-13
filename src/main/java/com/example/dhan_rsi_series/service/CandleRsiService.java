@@ -1,5 +1,6 @@
 package com.example.dhan_rsi_series.service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -1552,6 +1553,9 @@ public class CandleRsiService {
     private final Map<String, Boolean> isGammaPresent  = new ConcurrentHashMap<>();
     private final Map<String, Double> getGammaByKey = new ConcurrentHashMap<>();
     private final Map<String, Double> getPreviousLtpByKey = new ConcurrentHashMap<>();
+
+    
+    
     public CandleRsiService(OptionRsiRepository repo,
                             DhanSubscriptionRepository subscriptionRepository,
                             OptionChainRepository optionChainRepository) {
@@ -1565,7 +1569,7 @@ public class CandleRsiService {
     // =========================================================
     @PostConstruct
     public void loadSubscriptions() {
-    	
+
     	List<OptionChain> optionChainList = optionChainRepository.findLatestRecordForEachSecurityId();
 
     	
