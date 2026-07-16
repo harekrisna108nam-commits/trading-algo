@@ -2500,12 +2500,12 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			FlowSignal putSignal = signalService.evaluate(snap, putSave, lastRsi.getOrDefault(putSave.getSecurityId(), putSave), "PUT", callBuy, putBuy);
 
 			// ================= APPLY SIGNAL TO RSI =================
-			executeCallSignal(callSignal, callSave, Optional.of(callTxn));
-			executePutSignal(putSignal, putSave, Optional.of(putTxn));
+			executeCallSignal(putSignal, callSave, Optional.of(callTxn));
+			executePutSignal(callSignal, putSave, Optional.of(putTxn));
 
 			// ================= UPDATE TRANSACTION =================
-			updateCallTransaction(callTxn, callSignal);
-			updatePutTransaction(putTxn, putSignal);
+			updateCallTransaction(callTxn, putSignal);
+			updatePutTransaction(putTxn, callSignal);
 
 			// ================= SAVE =================
 			rsiRepository.saveAll(List.of(callSave, putSave));
