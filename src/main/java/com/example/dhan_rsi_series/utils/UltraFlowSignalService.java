@@ -18,8 +18,8 @@ public class UltraFlowSignalService {
 	private final Map<String, Boolean> firstTimeExecution = new ConcurrentHashMap<>();
 	public final Map<String, OptionRsi> callBaseBucket = new ConcurrentHashMap<>();
 	public final Map<String, OptionRsi> putBaseBucket = new ConcurrentHashMap<>();
-	private final String callKey = "NIFTY" + "_" + "72171" + "_5";
-	private final String putKey = "NIFTY" + "_" + "72172" + "_5";
+	private final String callKey = "NIFTY" + "_" + "57344" + "_5";
+	private final String putKey = "NIFTY" + "_" + "57345" + "_5";
 
 	// =========================================================
 	// 🔥 LOAD (ONE TIME)
@@ -52,7 +52,7 @@ public class UltraFlowSignalService {
 
 			// 1. Call Base line Bucket replacement
 
-			boolean callCloseCondition = (callBaseBucket.getOrDefault(callKey, e).getClose() >= e.getClose());
+			boolean callCloseCondition = (callBaseBucket.getOrDefault(callKey, e).getClose() <= e.getClose());
 
 			if (callCloseCondition) {
 				callBaseBucket.put(callKey, e);
@@ -65,14 +65,14 @@ public class UltraFlowSignalService {
 			Double currentCallNetFlow = e.getNetFlow();
 			Double currentCallCallFlow = e.getCallFlow();
 
+			if (currentCallNetFlow < callBucketNetFlow & currentCallCallFlow < callBucketCallFlow) {
+				return FlowSignal.BUY_PUT;
+			}
+			
 			if (currentCallNetFlow > callBucketNetFlow & currentCallCallFlow >= callBucketCallFlow) {
-				return FlowSignal.BUY_CALL;
+				return FlowSignal.SELL_PUT;
 			}
-
-			if (currentCallNetFlow >= callBucketNetFlow & currentCallCallFlow < callBucketCallFlow) {
-				return FlowSignal.SELL_CALL;
-			}
-
+			
 		}
 
 		if (e.getOptionType().equalsIgnoreCase("PUT")) {
@@ -86,7 +86,7 @@ public class UltraFlowSignalService {
 
 			firstTimeExecution.put(putKey, false);
 
-			boolean putCloseCondition = (putBaseBucket.getOrDefault(putKey, e).getClose() >= e.getClose());
+			boolean putCloseCondition = (putBaseBucket.getOrDefault(putKey, e).getClose() <= e.getClose());
 
 			if (putCloseCondition) {
 				putBaseBucket.put(putKey, e);
@@ -99,12 +99,12 @@ public class UltraFlowSignalService {
 			Double currentPutNetFlow = e.getNetFlow();
 			Double currentPutCallFlow = e.getPutFlow();
 
-			if (currentPutNetFlow < putBucketNetFlow & currentPutCallFlow >= putBucketPutFlow) {
-				return FlowSignal.BUY_PUT;
-			}
+			if (currentPutNetFlow > putBucketNetFlow & currentPutCallFlow < putBucketPutFlow) {
+				return FlowSignal.BUY_CALL;
+			}		
 
-			if (currentPutNetFlow <= putBucketNetFlow & currentPutCallFlow < putBucketPutFlow) {
-				return FlowSignal.SELL_PUT;
+			if (currentPutNetFlow < putBucketNetFlow & currentPutCallFlow >= putBucketPutFlow) {
+				return FlowSignal.SELL_CALL;
 			}
 
 		}

@@ -2437,10 +2437,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			// =================================================
 
 			OptionTransaction callTxn = transactionRepository.findByTimeframeAndOptionTypeAndActive("5S", "CALL", true)
-					.orElseGet(() -> transactionRepository.save(newTxn("NIFTY", 72171, "CALL")));
+					.orElseGet(() -> transactionRepository.save(newTxn("NIFTY", 57344, "CALL")));
 
 			OptionTransaction putTxn = transactionRepository.findByTimeframeAndOptionTypeAndActive("5S", "PUT", true)
-					.orElseGet(() -> transactionRepository.save(newTxn("NIFTY", 72172, "PUT")));
+					.orElseGet(() -> transactionRepository.save(newTxn("NIFTY", 57345, "PUT")));
 
 			// =================================================
 			// FIND RSI

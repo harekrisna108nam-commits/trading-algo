@@ -21,7 +21,7 @@ public class ExpiryCleanupSchedulerService {
     private final DhanSubscriptionRepository dhanSubscriptionRepository;
 
     @Transactional
-    @Scheduled(cron = "0 0 7 * * *", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 14 7 * * *", zone = "Asia/Kolkata")
     public void cleanupExpiredData() {
 
         LocalDate today = LocalDate.now();

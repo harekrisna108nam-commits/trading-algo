@@ -147,16 +147,16 @@ public class FlowSignalService {
 //			}
 			
 			if (optionRsi.getHigh()>optionRsi.getOpen() 
-					&& optionRsi.getLow()>=0.95*optionRsi.getOpen()
+					&& optionRsi.getLow()>=optionRsi.getOpen()
 					&& optionRsi.getClose()>optionRsi.getOpen()
 					&& optionRsi.getPutFlow() < optionRsiPrev.getPutFlow() && isEnableBuy) {
 
 				return FlowSignal.BUY_CALL;
 			}
 			
-			if (optionRsi.getHigh()<=1.02*optionRsi.getOpen() 
+			if (optionRsi.getHigh()<=optionRsi.getOpen() 
 					&& optionRsi.getLow()<=optionRsi.getOpen()
-					&& optionRsi.getClose()<=1.02*optionRsi.getOpen()
+					&& optionRsi.getClose()<=optionRsi.getOpen()
 					&& optionRsi.getOpen()<=optionRsiPrev.getClose()
 					&& optionRsi.getClose()<=optionRsiPrev.getClose()
 					&& optionRsi.getPutFlow() > optionRsiPrev.getPutFlow()  && isEnableSell ) {
@@ -218,16 +218,16 @@ public class FlowSignalService {
 //			}
 			
 			if (optionRsi.getHigh()>optionRsi.getOpen() 
-					&& optionRsi.getLow()>=0.95*optionRsi.getOpen()
+					&& optionRsi.getLow()>=optionRsi.getOpen()
 					&& optionRsi.getClose()>optionRsi.getOpen()
 					&& optionRsi.getCallFlow() < optionRsiPrev.getCallFlow() && isEnableBuy) {
 
 				return FlowSignal.BUY_PUT;
 			}
 			
-			if (optionRsi.getHigh()<=1.02*optionRsi.getOpen() 
+			if (optionRsi.getHigh()<=optionRsi.getOpen() 
 					&& optionRsi.getLow()<=optionRsi.getOpen()
-					&& optionRsi.getClose()<=1.02*optionRsi.getOpen()
+					&& optionRsi.getClose()<=optionRsi.getOpen()
 					&& optionRsi.getOpen()<=optionRsiPrev.getClose()
 					&& optionRsi.getClose()<=optionRsiPrev.getClose()
 					&& optionRsi.getCallFlow() > optionRsiPrev.getCallFlow()  && isEnableSell ) {
