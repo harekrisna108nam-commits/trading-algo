@@ -97,9 +97,9 @@ public class UltraFlowSignalService {
 			Double putBucketPutFlow = putBaseBucket.getOrDefault(putKey, e).getPutFlow();
 
 			Double currentPutNetFlow = e.getNetFlow();
-			Double currentPutCallFlow = e.getPutFlow();
+			Double currentPutPutFlow = e.getPutFlow();
 
-			if (currentPutNetFlow > putBucketNetFlow & currentPutCallFlow < putBucketPutFlow) {
+			if (currentPutNetFlow > putBucketNetFlow & currentPutPutFlow < putBucketPutFlow) {
 				return FlowSignal.BUY_CALL;
 			}		
 
