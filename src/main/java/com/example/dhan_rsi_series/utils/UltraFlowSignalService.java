@@ -69,9 +69,9 @@ public class UltraFlowSignalService {
 				return FlowSignal.BUY_PUT;
 			}
 			
-			if (currentCallNetFlow > callBucketNetFlow & currentCallCallFlow >= callBucketCallFlow) {
-				return FlowSignal.SELL_PUT;
-			}
+//			if (currentCallNetFlow > callBucketNetFlow & currentCallCallFlow >= callBucketCallFlow) {
+//				return FlowSignal.SELL_PUT;
+//			}
 			
 		}
 
@@ -103,9 +103,9 @@ public class UltraFlowSignalService {
 				return FlowSignal.BUY_CALL;
 			}		
 
-			if (currentPutNetFlow < putBucketNetFlow & currentPutCallFlow >= putBucketPutFlow) {
-				return FlowSignal.SELL_CALL;
-			}
+//			if (currentPutNetFlow < putBucketNetFlow & currentPutCallFlow >= putBucketPutFlow) {
+//				return FlowSignal.SELL_CALL;
+//			}
 
 		}
 

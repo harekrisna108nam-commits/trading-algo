@@ -5,7 +5,6 @@ import java.nio.ByteOrder;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -23,11 +22,11 @@ import com.example.dhan_rsi_series.entity.DhanSubscription;
 import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
+import com.example.dhan_rsi_series.model.DhanOrderRequest;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
 import com.example.dhan_rsi_series.service.CandleRsiService;
-import com.example.dhan_rsi_series.service.DhanFundLimitService;
 import com.example.dhan_rsi_series.service.DhanOrderService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +36,7 @@ import reactor.core.publisher.GroupedFlux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.databind.ObjectMapper;
 
 //@Slf4j
 //@Component
@@ -2188,7 +2188,14 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 	private final UltraFlowSignalService signalService;
 	private final OptionRsiRepository rsiRepository;
 	private final OptionTransactionRepository transactionRepository;
+	private final DhanOrderService dhanOrderService;
 
+	@Value("${dhan.client-id}")
+	private String clientId;
+
+	@Value("${dhan.access-token}")
+	private String accessToken;
+	
 	private volatile WebSocketSession session;
 
 	// =========================================================
@@ -2224,7 +2231,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 	public DhanLiveDataHandler(CandleRsiService rsiService, DhanSubscriptionStore store,
 			DpiAggregatorService aggregator, UltraFlowSignalService signalService, OptionRsiRepository rsiRepository,
-			OptionTransactionRepository transactionRepository) {
+			OptionTransactionRepository transactionRepository, DhanOrderService dhanOrderService) {
 
 		this.rsiService = rsiService;
 		this.store = store;
@@ -2232,6 +2239,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		this.signalService = signalService;
 		this.rsiRepository = rsiRepository;
 		this.transactionRepository = transactionRepository;
+		this.dhanOrderService = dhanOrderService;
 	}
 
 	// =========================================================
@@ -2500,8 +2508,8 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			FlowSignal putSignal = signalService.evaluate(snap, putSave, lastRsi.getOrDefault(putSave.getSecurityId(), putSave), "PUT", callBuy, putBuy);
 
 			// ================= APPLY SIGNAL TO RSI =================
-			executeCallSignal(putSignal, callSave, Optional.of(callTxn));
-			executePutSignal(callSignal, putSave, Optional.of(putTxn));
+			executeCallSignal(putSignal, callSave, putSave, Optional.of(callTxn));
+			executePutSignal(callSignal, callSave, putSave, Optional.of(putTxn));
 
 			// ================= UPDATE TRANSACTION =================
 			updateCallTransaction(callTxn, putSignal);
@@ -2570,19 +2578,29 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 // SIGNAL EXECUTION
 // =========================================================
 
-	private void executeCallSignal(FlowSignal signal, OptionRsi callSave, Optional<OptionTransaction> callOptFinal) {
+	private void executeCallSignal(FlowSignal signal, OptionRsi callSave, OptionRsi putSave, Optional<OptionTransaction> callOptFinal) {
 		switch (signal) {
-		case BUY_CALL -> callSave.setBuy(true);
-		case SELL_CALL -> callSave.setSell(true);
+		case BUY_CALL -> {
+			putSave.setSell(true);
+			exitPut(buildRequest("SELL", putSave));
+			callSave.setBuy(true);
+			placeCallOrder(buildRequest("BUY", callSave));
+			}
+		//case SELL_CALL -> callSave.setSell(true);
 		default -> {
 		}
 		}
 	}
 
-	private void executePutSignal(FlowSignal signal, OptionRsi putSave, Optional<OptionTransaction> putOptFinal) {
+	private void executePutSignal(FlowSignal signal, OptionRsi callSave, OptionRsi putSave, Optional<OptionTransaction> putOptFinal) {
 		switch (signal) {
-		case BUY_PUT -> putSave.setBuy(true);
-		case SELL_PUT -> putSave.setSell(true);
+		case BUY_PUT -> {
+			callSave.setSell(true);
+			exitCall(buildRequest("SELL", callSave));
+			putSave.setBuy(true);
+			placePutOrder(buildRequest("BUY", putSave));
+			}
+		//case SELL_PUT -> putSave.setSell(true);
 		default -> {
 		}
 		}
@@ -2649,6 +2667,76 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 				.createdAt(LocalDateTime.now())
 				.updatedAt(LocalDateTime.now())
 				.build();
+	}
+	
+	
+	private DhanOrderRequest buildRequest(String type, OptionRsi rsi) {
+
+//		FundLimitResponse fund = dhanFundLimitService.getFundLimit()
+//	            .subscribeOn(Schedulers.boundedElastic()) // safer thread
+//	            .block();
+//
+//	    if (fund == null) {
+//	        throw new RuntimeException("Failed to fetch fund limit");
+//	    }
+//
+//	    double availableBalance = fund.getAvailabelBalance();
+//
+//	    if (availableBalance < 1000) {
+//	        throw new RuntimeException("Insufficient balance");
+//	    }
+	    
+		DhanOrderRequest request = DhanOrderRequest.builder().dhanClientId(clientId)
+				.correlationId(CorrelationIdGenerator.generate("NIFTY")).transactionType(type)
+				.exchangeSegment("NSE_FNO").productType("INTRADAY").orderType("MARKET").validity("DAY")
+				.securityId(String.valueOf(rsi.getSecurityId())).quantity(65).disclosedQuantity(0).price(0).triggerPrice(0)
+				.afterMarketOrder(false).build();
+
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			log.info("DHAN ORDER REQUEST => {}", mapper.writeValueAsString(request));
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return request;
+	}
+	
+	
+	private void placeCallOrder(DhanOrderRequest request) {
+
+		System.out.println("🟢 BUY CALL");
+
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("BUY CALL :: " + response))
+				.doOnError(error -> System.out.println("❌ BUY CALL ERROR :: " + error.getMessage())).subscribe();
+	}
+
+	private void placePutOrder(DhanOrderRequest request) {
+
+		System.out.println("🔴 BUY PUT");
+
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("BUY PUT :: " + response))
+				.doOnError(error -> System.out.println("❌ BUY PUT ERROR :: " + error.getMessage())).subscribe();
+	}
+
+	private void exitCall(DhanOrderRequest request) {
+
+		System.out.println("⚪ EXIT CALL");
+
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("SELL CALL :: " + response))
+				.doOnError(error -> System.out.println("❌ SELL CALL ERROR :: " + error.getMessage())).subscribe();
+	}
+
+	private void exitPut(DhanOrderRequest request) {
+
+		System.out.println("⚪ EXIT PUT");
+
+		dhanOrderService.placeOrder(accessToken, request)
+				.doOnSuccess(response -> System.out.println("SELL PUT :: " + response))
+				.doOnError(error -> System.out.println("❌ SELL PUT ERROR :: " + error.getMessage())).subscribe();
 	}
 
 	// =========================================================
