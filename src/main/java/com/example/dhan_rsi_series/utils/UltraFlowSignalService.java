@@ -55,7 +55,9 @@ public class UltraFlowSignalService {
 			boolean callCloseCondition = (callBaseBucket.getOrDefault(callKey, e).getClose() <= e.getClose());
 
 			if (callCloseCondition) {
-				callBaseBucket.put(callKey, e);
+				OptionRsi callOption = callBaseBucket.getOrDefault(callKey, e);
+				callOption.setClose(e.getClose());
+				callBaseBucket.put(callKey, callOption);
 				return FlowSignal.HOLD;
 			}
 
@@ -66,6 +68,14 @@ public class UltraFlowSignalService {
 			Double currentCallCallFlow = e.getCallFlow();
 
 			if (currentCallNetFlow < callBucketNetFlow & currentCallCallFlow < callBucketCallFlow) {
+				OptionRsi callOption = callBaseBucket.getOrDefault(callKey, e);
+				OptionRsi putOption = putBaseBucket.getOrDefault(putKey, e);
+				putOption.setCallFlow(callOption.getCallFlow());
+				putOption.setPutFlow(callOption.getPutFlow());
+				putOption.setNetFlow(callOption.getNetFlow());
+				
+				//update the put base bucket
+				putBaseBucket.put(putKey, putOption);
 				return FlowSignal.BUY_PUT;
 			}
 			
@@ -89,7 +99,9 @@ public class UltraFlowSignalService {
 			boolean putCloseCondition = (putBaseBucket.getOrDefault(putKey, e).getClose() <= e.getClose());
 
 			if (putCloseCondition) {
-				putBaseBucket.put(putKey, e);
+				OptionRsi putOption = putBaseBucket.getOrDefault(putKey, e);
+				putOption.setClose(e.getClose());
+				putBaseBucket.put(putKey, putOption);
 				return FlowSignal.HOLD;
 			}
 
@@ -100,6 +112,14 @@ public class UltraFlowSignalService {
 			Double currentPutPutFlow = e.getPutFlow();
 
 			if (currentPutNetFlow > putBucketNetFlow & currentPutPutFlow < putBucketPutFlow) {
+				OptionRsi putOption = putBaseBucket.getOrDefault(putKey, e);
+				OptionRsi callOption = callBaseBucket.getOrDefault(callKey, e);
+				callOption.setCallFlow(putOption.getCallFlow());
+				callOption.setPutFlow(putOption.getPutFlow());
+				callOption.setNetFlow(putOption.getNetFlow());
+				
+				//update the call base bucket
+				callBaseBucket.put(callKey, callOption);
 				return FlowSignal.BUY_CALL;
 			}		
 
