@@ -463,6 +463,8 @@ public class DpiAggregatorService {
 	// =========================================================
 	private final Map<Integer, ConcurrentHashMap<LocalDate, Bucket>> buckets = new ConcurrentHashMap<>();
 
+	public static Double netFlow = 0.0;
+	
 	private final MoneyFlowRepository moneyFlowRepository;
 
 	public DpiAggregatorService(MoneyFlowRepository moneyFlowRepository) {
@@ -691,7 +693,8 @@ public class DpiAggregatorService {
 			double weightedOi) {
 
 		public double netDpi() {
-			return (currCallDpi - currPutDpi) + (futureDpi);
+			netFlow = (currCallDpi - currPutDpi) + (futureDpi);
+			return netFlow;
 		}
 	}
 

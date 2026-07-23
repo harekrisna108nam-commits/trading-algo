@@ -23,6 +23,7 @@ import com.example.dhan_rsi_series.repository.OptionChainRepository;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.utils.CandleSnapshot;
 import com.example.dhan_rsi_series.utils.CandleState;
+import com.example.dhan_rsi_series.utils.DpiAggregatorService;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -339,7 +340,6 @@ import lombok.extern.slf4j.Slf4j;
 //        return latestMap.get(securityId);
 //    }
 //}
-
 
 //@Component
 //public class CandleRsiService {
@@ -1529,341 +1529,397 @@ public class CandleRsiService {
 @Component
 public class CandleRsiService {
 
-    private final OptionRsiRepository repo;
-    private final OptionChainRepository optionChainRepository;
-    private final DhanSubscriptionRepository subscriptionRepository;
+	private final OptionRsiRepository repo;
+	private final OptionChainRepository optionChainRepository;
+	private final DhanSubscriptionRepository subscriptionRepository;
 
-    // ================= CANDLE =================
-    private final Map<String, CandleState> candleMap = new ConcurrentHashMap<>();
-    private final Map<String, Integer> lastOiMap = new ConcurrentHashMap<>();
+	// ================= CANDLE =================
+	private final Map<String, CandleState> candleMap = new ConcurrentHashMap<>();
+	private final Map<String, Integer> lastOiMap = new ConcurrentHashMap<>();
 
-    // ================= GAMMA =================
-    private final Map<Integer, Double> selectedGammaMap = new ConcurrentHashMap<>();
-    public final Map<Integer, OptionRsi> fourthSecOptionMap = new ConcurrentHashMap<>();
-    private final Set<Integer> pendingGammaSet = ConcurrentHashMap.newKeySet();
+	// ================= GAMMA =================
+	private final Map<Integer, Double> selectedGammaMap = new ConcurrentHashMap<>();
+	public final Map<Integer, OptionRsi> fourthSecOptionMap = new ConcurrentHashMap<>();
+	private final Set<Integer> pendingGammaSet = ConcurrentHashMap.newKeySet();
 
-    // ================= STRIKE CACHE (🔥 NO DB CALL) =================
-    private final Map<Integer, Integer> strikeToSecurityCall = new ConcurrentHashMap<>();
-    private final Map<Integer, Integer> strikeToSecurityPut  = new ConcurrentHashMap<>();
-    private final Map<Integer, DhanSubscription> securityToStrikeMap  = new ConcurrentHashMap<>();
-    private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityCall  = new ConcurrentHashMap<>();
-    private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityPut  = new ConcurrentHashMap<>();
+	// ================= STRIKE CACHE (🔥 NO DB CALL) =================
+	private final Map<Integer, Integer> strikeToSecurityCall = new ConcurrentHashMap<>();
+	private final Map<Integer, Integer> strikeToSecurityPut = new ConcurrentHashMap<>();
+	private final Map<Integer, DhanSubscription> securityToStrikeMap = new ConcurrentHashMap<>();
+	private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityCall = new ConcurrentHashMap<>();
+	private final Map<LocalDate, Map<Integer, Integer>> expiryToStrikeToSecurityPut = new ConcurrentHashMap<>();
 
-    public final Map<Integer, OptionRsi> latestMap = new ConcurrentHashMap<>();
-    private final Map<String, Boolean> isGammaPresent  = new ConcurrentHashMap<>();
-    private final Map<String, Double> getGammaByKey = new ConcurrentHashMap<>();
-    private final Map<String, Double> getPreviousLtpByKey = new ConcurrentHashMap<>();
+	public final Map<Integer, OptionRsi> latestMap = new ConcurrentHashMap<>();
+	private final Map<String, Boolean> isGammaPresent = new ConcurrentHashMap<>();
+	private final Map<String, Double> getGammaByKey = new ConcurrentHashMap<>();
+	private final Map<String, Double> getPreviousLtpByKey = new ConcurrentHashMap<>();
 
-    
-    
-    public CandleRsiService(OptionRsiRepository repo,
-                            DhanSubscriptionRepository subscriptionRepository,
-                            OptionChainRepository optionChainRepository) {
-        this.repo = repo;
-        this.subscriptionRepository = subscriptionRepository;
-        this.optionChainRepository = optionChainRepository;
-    }
+	public CandleRsiService(OptionRsiRepository repo, DhanSubscriptionRepository subscriptionRepository,
+			OptionChainRepository optionChainRepository) {
+		this.repo = repo;
+		this.subscriptionRepository = subscriptionRepository;
+		this.optionChainRepository = optionChainRepository;
+	}
 
-    // =========================================================
-    // 🔥 LOAD ALL STRIKES INTO MEMORY (ONE TIME)
-    // =========================================================
-    @PostConstruct
-    public void loadSubscriptions() {
+	// =========================================================
+	// 🔥 LOAD ALL STRIKES INTO MEMORY (ONE TIME)
+	// =========================================================
+	@PostConstruct
+	public void loadSubscriptions() {
 
-    	List<OptionChain> optionChainList = optionChainRepository.findLatestRecordForEachSecurityId();
+		List<OptionChain> optionChainList = optionChainRepository.findLatestRecordForEachSecurityId();
 
-    	
-        List<DhanSubscription> list = subscriptionRepository.findByActiveTrue();
+		List<DhanSubscription> list = subscriptionRepository.findByActiveTrue();
 
-        list.parallelStream().forEach(s -> {
-        	String key = "NIFTY" + "_" + s.getSecurityId() + "_5";
-            int strike = (int) s.getStrike();
-            int secId  = Integer.parseInt(s.getSecurityId());
+		list.parallelStream().forEach(s -> {
+			String key = "NIFTY" + "_" + s.getSecurityId() + "_5";
+			int strike = (int) s.getStrike();
+			int secId = Integer.parseInt(s.getSecurityId());
 
-            securityToStrikeMap.put(secId, s);
-            
-            isGammaPresent.put(key, false);
+			securityToStrikeMap.put(secId, s);
 
-            if ("CALL".equalsIgnoreCase(s.getOptionType())) {
+			isGammaPresent.put(key, false);
 
-                strikeToSecurityCall.put(strike, secId);
+			if ("CALL".equalsIgnoreCase(s.getOptionType())) {
 
-                expiryToStrikeToSecurityCall
-                        .computeIfAbsent(s.getExpiryDate(), k -> new HashMap<>())
-                        .put(strike, secId);
+				strikeToSecurityCall.put(strike, secId);
 
-            } else {
+				expiryToStrikeToSecurityCall.computeIfAbsent(s.getExpiryDate(), k -> new HashMap<>()).put(strike,
+						secId);
 
-                strikeToSecurityPut.put(strike, secId);
+			} else {
 
-                expiryToStrikeToSecurityPut
-                        .computeIfAbsent(s.getExpiryDate(), k -> new HashMap<>())
-                        .put(strike, secId);
-            }
-        });
-        
-        if (!optionChainList.isEmpty()) {
-    		optionChainList.parallelStream().peek(op->{
-    			String key = op.getSymbol() + "_" + op.getSecurityId() + "_5";
-    			lastOiMap.put(key, op.getOi());
-    			isGammaPresent.put(key, true);
-    			getGammaByKey.put(key, op.getGamma());
-    			getPreviousLtpByKey.put(key, op.getClose());
-    		});
-    		
-    		
-        }
+				strikeToSecurityPut.put(strike, secId);
 
-        log.info("✅ Loaded {} subscriptions into memory", list.size());
-    }
+				expiryToStrikeToSecurityPut.computeIfAbsent(s.getExpiryDate(), k -> new HashMap<>()).put(strike, secId);
+			}
+		});
 
-    // =========================================================
-    public OptionRsi onLtp(String symbol, int securityId, String optionType,
-                          double ltp, int oi, int highestOi,
-                          double atp, int timeframeSeconds, LocalDate expiry) {
+		if (!optionChainList.isEmpty()) {
+			optionChainList.parallelStream().peek(op -> {
+				String key = op.getSymbol() + "_" + op.getSecurityId() + "_5";
+				lastOiMap.put(key, op.getOi());
+				isGammaPresent.put(key, true);
+				getGammaByKey.put(key, op.getGamma());
+				getPreviousLtpByKey.put(key, op.getClose());
+			});
 
-        long now = System.currentTimeMillis() / 1000;
-        String key = symbol + "_" + securityId + "_" + timeframeSeconds;
-        String key1 = symbol + "_" + securityId + "_5" ;
+		}
 
-        CandleState candle = candleMap.computeIfAbsent(
-                key, k -> new CandleState(timeframeSeconds)
-        );
+		log.info("✅ Loaded {} subscriptions into memory", list.size());
+	}
+
+	// =========================================================
+	public OptionRsi onLtp(String symbol, int securityId, String optionType, double ltp, int oi, int highestOi,
+			double atp, int timeframeSeconds, LocalDate expiry) {
+
+		long now = System.currentTimeMillis() / 1000;
+		String key = symbol + "_" + securityId + "_" + timeframeSeconds;
+		String key1 = symbol + "_" + securityId + "_5";
+
+		CandleState candle = candleMap.computeIfAbsent(key, k -> new CandleState(timeframeSeconds));
 
 //        candle.onTick(ltp, now);
 //
 //        if (!candle.isComplete(now)) return null;
 //
 //        CandleSnapshot snap = candle.snapshotAndReset(now, ltp);
-        
-        CandleSnapshot snap = candle.onTick(ltp, now);
 
-        if (snap == null) return null;
+		CandleSnapshot snap = candle.onTick(ltp, now);
 
-        // =====================================================
-        // 🔥 4 SEC → GAMMA ENGINE
-        // =====================================================
-        if ((isGammaPresent.get(key1)!=null && !isGammaPresent.get(key1)) && !optionType.equalsIgnoreCase("FUTURE") && timeframeSeconds == 4) {
+		if (snap == null)
+			return null;
 
-            OptionRsi rsi4 = new OptionRsi();
-            rsi4.setSecurityId(securityId);
-            rsi4.setOptionType(optionType);
-            rsi4.setClose(snap.close());
+		// =====================================================
+		// 🔥 4 SEC → GAMMA ENGINE
+		// =====================================================
+		if ((isGammaPresent.get(key1) != null && !isGammaPresent.get(key1)) && !optionType.equalsIgnoreCase("FUTURE")
+				&& timeframeSeconds == 4) {
 
-            rsi4.setCandleTime(
-                Instant.ofEpochSecond(snap.startEpoch())
-                    .atZone(ZoneId.of("Asia/Kolkata"))
-                    .toLocalDateTime()
-            );
+			OptionRsi rsi4 = new OptionRsi();
+			rsi4.setSecurityId(securityId);
+			rsi4.setOptionType(optionType);
+			rsi4.setClose(snap.close());
 
-            fourthSecOptionMap.put(securityId, rsi4);
+			rsi4.setCandleTime(
+					Instant.ofEpochSecond(snap.startEpoch()).atZone(ZoneId.of("Asia/Kolkata")).toLocalDateTime());
 
-            boolean success = tryCalculateGamma(securityId, optionType);
+			fourthSecOptionMap.put(securityId, rsi4);
 
-            if (!success) {
-                pendingGammaSet.add(securityId);
-            }
+			boolean success = tryCalculateGamma(securityId, optionType);
 
-            // 🔥 RECOMPUTE PENDING
-            recomputePendingGamma();
+			if (!success) {
+				pendingGammaSet.add(securityId);
+			}
 
-            // 🔥 MEMORY SAFETY
-            if (fourthSecOptionMap.size() > 2000) {
-                fourthSecOptionMap.clear();
-                pendingGammaSet.clear();
-                log.warn("⚠ Cleared 4-sec cache (memory protection)");
-            }
+			// 🔥 RECOMPUTE PENDING
+			recomputePendingGamma();
 
-            return null;
-        }
+			// 🔥 MEMORY SAFETY
+			if (fourthSecOptionMap.size() > 2000) {
+				fourthSecOptionMap.clear();
+				pendingGammaSet.clear();
+				log.warn("⚠ Cleared 4-sec cache (memory protection)");
+			}
 
-        // =====================================================
-        // 5 SEC FLOW
-        // =====================================================
-        return process(symbol, securityId, optionType,
-                snap, oi, highestOi, atp, expiry);
-    }
+			return null;
+		}
 
-    // =========================================================
-    // 🔥 FAST GAMMA CALCULATION (NO DB)
-    // =========================================================
-    private boolean tryCalculateGamma(int securityId, String optionType) {
+		// =====================================================
+		// 5 SEC FLOW
+		// =====================================================
+		return process(symbol, securityId, optionType, snap, oi, highestOi, atp, expiry);
+	}
 
-    	DhanSubscription ds = securityToStrikeMap.get(securityId);
-    	Integer strikeInt = ds.getStrike();
-        if (strikeInt == null) return false;
+	// =========================================================
+	// 🔥 FAST GAMMA CALCULATION (NO DB)
+	// =========================================================
+	private boolean tryCalculateGamma(int securityId, String optionType) {
 
-        int lowerStrike = strikeInt - 50;
-        int upperStrike = strikeInt + 50;
+		DhanSubscription ds = securityToStrikeMap.get(securityId);
+		Integer strikeInt = ds.getStrike();
+		if (strikeInt == null)
+			return false;
 
-        Integer lowerId = "CALL".equalsIgnoreCase(optionType)
-                ? expiryToStrikeToSecurityCall.get(ds.getExpiryDate()).get(lowerStrike)
-                : expiryToStrikeToSecurityPut.get(ds.getExpiryDate()).get(lowerStrike);
-        
-        Integer upperId = "CALL".equalsIgnoreCase(optionType)
-        		? expiryToStrikeToSecurityCall.get(ds.getExpiryDate()).get(upperStrike)
-                : expiryToStrikeToSecurityPut.get(ds.getExpiryDate()).get(upperStrike);
+		int lowerStrike = strikeInt - 50;
+		int upperStrike = strikeInt + 50;
 
-        // EDGE → gamma = 0
-        if (lowerId == null || upperId == null) {
-            selectedGammaMap.put(securityId, 0.0);
-            return false;
-        }
+		Integer lowerId = "CALL".equalsIgnoreCase(optionType)
+				? expiryToStrikeToSecurityCall.get(ds.getExpiryDate()).get(lowerStrike)
+				: expiryToStrikeToSecurityPut.get(ds.getExpiryDate()).get(lowerStrike);
 
-        OptionRsi current = fourthSecOptionMap.get(securityId);
-        OptionRsi lower   = fourthSecOptionMap.get(lowerId);
-        OptionRsi upper   = fourthSecOptionMap.get(upperId);
+		Integer upperId = "CALL".equalsIgnoreCase(optionType)
+				? expiryToStrikeToSecurityCall.get(ds.getExpiryDate()).get(upperStrike)
+				: expiryToStrikeToSecurityPut.get(ds.getExpiryDate()).get(upperStrike);
 
-        if (current == null || lower == null || upper == null) {
-            return false;
-        }
+		// EDGE → gamma = 0
+		if (lowerId == null || upperId == null) {
+			selectedGammaMap.put(securityId, 0.0);
+			return false;
+		}
 
-        if (!current.getCandleTime().equals(lower.getCandleTime()) ||
-            !current.getCandleTime().equals(upper.getCandleTime())) {
-            return false;
-        }
+		OptionRsi current = fourthSecOptionMap.get(securityId);
+		OptionRsi lower = fourthSecOptionMap.get(lowerId);
+		OptionRsi upper = fourthSecOptionMap.get(upperId);
 
-        double gamma;
+		if (current == null || lower == null || upper == null) {
+			return false;
+		}
 
-        if ("CALL".equalsIgnoreCase(optionType)) {
-            gamma = Math.abs(lower.getClose() - upper.getClose()) / 100.0;
-        } else {
-            gamma = Math.abs(upper.getClose() - lower.getClose()) / 100.0;
-        }
+		if (!current.getCandleTime().equals(lower.getCandleTime())
+				|| !current.getCandleTime().equals(upper.getCandleTime())) {
+			return false;
+		}
 
-        if (Double.isNaN(gamma) || Double.isInfinite(gamma)) {
-            gamma = 0.0;
-        }
+		double gamma;
 
-        if (Math.abs(gamma) > 10 || Math.abs(gamma) < 0.01) {
-            gamma = 0.0;
-        }
+		if ("CALL".equalsIgnoreCase(optionType)) {
+			gamma = Math.abs(lower.getClose() - upper.getClose()) / 100.0;
+		} else {
+			gamma = Math.abs(upper.getClose() - lower.getClose()) / 100.0;
+		}
 
-        gamma = Math.round(gamma * 1000.0) / 1000.0;
+		if (Double.isNaN(gamma) || Double.isInfinite(gamma)) {
+			gamma = 0.0;
+		}
 
-        selectedGammaMap.put(securityId, gamma);
+		if (Math.abs(gamma) > 10 || Math.abs(gamma) < 0.01) {
+			gamma = 0.0;
+		}
 
-        return true;
-    }
+		gamma = Math.round(gamma * 1000.0) / 1000.0;
 
-    // =========================================================
-    // 🔁 RECOMPUTE DELAYED STRIKES
-    // =========================================================
-    private void recomputePendingGamma() {
+		selectedGammaMap.put(securityId, gamma);
 
-        if (pendingGammaSet.isEmpty()) return;
+		return true;
+	}
 
-        Iterator<Integer> iterator = pendingGammaSet.iterator();
+	// =========================================================
+	// 🔁 RECOMPUTE DELAYED STRIKES
+	// =========================================================
+	private void recomputePendingGamma() {
 
-        while (iterator.hasNext()) {
+		if (pendingGammaSet.isEmpty())
+			return;
 
-            Integer secId = iterator.next();
+		Iterator<Integer> iterator = pendingGammaSet.iterator();
 
-            OptionRsi rsi = fourthSecOptionMap.get(secId);
-            if (rsi == null) continue;
+		while (iterator.hasNext()) {
 
-            boolean success = tryCalculateGamma(secId, rsi.getOptionType());
+			Integer secId = iterator.next();
 
-            if (success) {
-                iterator.remove();
-                log.debug("✅ Gamma resolved for {}", secId);
-            }
-        }
-    }
+			OptionRsi rsi = fourthSecOptionMap.get(secId);
+			if (rsi == null)
+				continue;
 
-    // =========================================================
-    // 5 SEC PROCESSING
-    // =========================================================
-    private OptionRsi process(String symbol,
-                             int securityId,
-                             String optionType,
-                             CandleSnapshot c,
-                             int oi,
-                             int highestOi,
-                             double atp, LocalDate expiry) {
+			boolean success = tryCalculateGamma(secId, rsi.getOptionType());
 
-        String key = symbol + "_" + securityId + "_5";
+			if (success) {
+				iterator.remove();
+				log.debug("✅ Gamma resolved for {}", secId);
+			}
+		}
+	}
 
-        double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0678 : (isGammaPresent.get(key)!=null && isGammaPresent.get(key)) ? getGammaByKey.get(key) : selectedGammaMap.getOrDefault(securityId, 0.0);
+	// =========================================================
+	// 5 SEC PROCESSING
+	// =========================================================
+	private OptionRsi process(String symbol, int securityId, String optionType, CandleSnapshot c, int oi, int highestOi,
+			double atp, LocalDate expiry) {
 
-        gamma = gamma > 1 ? 1 : gamma;
-        
-        Integer prevOi = lastOiMap.getOrDefault(key, oi);
-        int deltaOi = oi - prevOi;
-        
-        double prevLtp = c.avgLtp();
-        if (isGammaPresent.get(key)!=null && isGammaPresent.get(key)) {
-        	prevLtp = getPreviousLtpByKey.get(key);
-        }
+		String key = symbol + "_" + securityId + "_5";
 
-        double sign = (c.close() > prevLtp) ? 1 : -1;
+		double gamma = "FUTURE".equalsIgnoreCase(optionType) ? 0.0678
+				: (isGammaPresent.get(key) != null && isGammaPresent.get(key)) ? getGammaByKey.get(key)
+						: selectedGammaMap.getOrDefault(securityId, 0.0);
 
-        double dpi = sign * Math.abs(deltaOi) * gamma * prevLtp;
-        double weightedOi = sign * Math.abs(deltaOi) * gamma;
+		gamma = gamma > 1 ? 1 : gamma;
 
-        lastOiMap.put(key, oi);
+		Integer prevOi = lastOiMap.getOrDefault(key, oi);
+		int deltaOi = oi - prevOi;
 
-        OptionRsi e = new OptionRsi();
+		double prevLtp = c.avgLtp();
+		if (isGammaPresent.get(key) != null && isGammaPresent.get(key)) {
+			prevLtp = getPreviousLtpByKey.get(key);
+		}
 
-        e.setSymbol(symbol);
-        e.setSecurityId(securityId);
-        e.setOptionType(optionType);
-        e.setTimeframe("5S");
+		double priceDelta = (c.close() - prevLtp);
+		
+		double sign = calculateFlowValue(DpiAggregatorService.netFlow, priceDelta, optionType);
+				
+		//double sign = (c.close() > prevLtp) ? 1 : -1;
+		
 
-        e.setCandleTime(
-                Instant.ofEpochSecond(c.startEpoch())
-                        .atZone(ZoneId.of("Asia/Kolkata"))
-                        .toLocalDateTime()
-        );
+		double dpi = sign * Math.abs(deltaOi) * gamma * prevLtp;
+		double weightedOi = sign * Math.abs(deltaOi) * gamma;
 
-        e.setOpen(c.open());
-        e.setHigh(c.high());
-        e.setLow(c.low());
-        e.setClose(c.close());
+		lastOiMap.put(key, oi);
 
-        e.setOi(oi);
-        e.setHighestOi(highestOi);
-        e.setAtp(atp);
+		OptionRsi e = new OptionRsi();
 
-        e.setDpi(dpi);
-        e.setWeightedOi(weightedOi);
-        e.setGamma(gamma);
-        e.setExpiry(expiry);
+		e.setSymbol(symbol);
+		e.setSecurityId(securityId);
+		e.setOptionType(optionType);
+		e.setTimeframe("5S");
 
-        latestMap.put(securityId, e);
-        
-        OptionChain optionChain = OptionChain.builder()
-        .id(e.getSymbol().toUpperCase() + e.getSecurityId()+LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")))
-        .symbol(e.getSymbol())
-        .securityId(e.getSecurityId())
-        .optionType(e.getOptionType())
-        .open(e.getOpen())
-        .low(e.getLow())
-        .high(e.getHigh())
-        .close(e.getClose())
-        .oi(e.getOi())
-        .highestOi(e.getHighestOi())
-        .atp(e.getAtp())
-        .dpi(e.getDpi())
-        .gamma(e.getGamma())
-        .expiry(e.getExpiry())
-        .candleTime(e.getCandleTime())
-        .build();
-        
-        log.info("Option Chain:: {}", optionChain);
-        
-        //LocalDateTime today328PM = LocalDate.now().atTime(15, 28);
+		e.setCandleTime(Instant.ofEpochSecond(c.startEpoch()).atZone(ZoneId.of("Asia/Kolkata")).toLocalDateTime());
 
-        //if (!optionChain.getCandleTime().isBefore(today328PM)) {
-            optionChainRepository.save(optionChain);  //here optionChain save should be parralel or asyncronous because of every 5 sec every security id's record save so time cost may be increased
-        //}
-        
-        isGammaPresent.put(key, false);
+		e.setOpen(c.open());
+		e.setHigh(c.high());
+		e.setLow(c.low());
+		e.setClose(c.close());
 
-        return e;
-    }
+		e.setOi(oi);
+		e.setHighestOi(highestOi);
+		e.setAtp(atp);
 
-    public OptionRsi latest(int securityId) {
-        return latestMap.get(securityId);
-    }
+		e.setDpi(dpi);
+		e.setWeightedOi(weightedOi);
+		e.setGamma(gamma);
+		e.setExpiry(expiry);
+
+		latestMap.put(securityId, e);
+
+		OptionChain optionChain = OptionChain.builder()
+				.id(e.getSymbol().toUpperCase() + e.getSecurityId()
+						+ LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")))
+				.symbol(e.getSymbol()).securityId(e.getSecurityId()).optionType(e.getOptionType()).open(e.getOpen())
+				.low(e.getLow()).high(e.getHigh()).close(e.getClose()).oi(e.getOi()).highestOi(e.getHighestOi())
+				.atp(e.getAtp()).dpi(e.getDpi()).gamma(e.getGamma()).expiry(e.getExpiry()).candleTime(e.getCandleTime())
+				.build();
+
+		log.info("Option Chain:: {}", optionChain);
+
+		// LocalDateTime today328PM = LocalDate.now().atTime(15, 28);
+
+		// if (!optionChain.getCandleTime().isBefore(today328PM)) {
+		optionChainRepository.save(optionChain); // here optionChain save should be parralel or asyncronous because of
+													// every 5 sec every security id's record save so time cost may be
+													// increased
+		// }
+
+		isGammaPresent.put(key, false);
+
+		return e;
+	}
+
+	public double calculateFlowValue(double netFlow, double priceDelta, String optionType) {
+
+		String netFlowDirection = netFlow > 0 ? "POSITIVE" : netFlow < 0 ? "NEGATIVE" : "ZERO";
+
+		return switch (netFlowDirection) {
+
+		case "POSITIVE" -> {
+
+			// Put price movement
+			if (optionType.equalsIgnoreCase("PUT")) {
+			if (priceDelta > 0) {
+				// Put price increasing
+				yield 0.8;
+			} else if (priceDelta < 0) {
+				// Put price decreasing
+				yield -1.3;
+			}
+			}
+			// Call price movement
+			if (optionType.equalsIgnoreCase("CALL")) {
+			if (priceDelta > 0) {
+				// Call price increasing
+				yield 1.3;
+			} else if (priceDelta < 0) {
+				// Call price decreasing
+				yield -0.8;
+			}
+			}
+
+			yield 0;
+		}
+
+		case "NEGATIVE" -> {
+
+			// Put price movement
+			if (optionType.equalsIgnoreCase("PUT")) {
+			if (priceDelta > 0) {
+				// Put price increasing
+				yield 1.3;
+			} else if (priceDelta < 0) {
+				// Put price decreasing
+				yield -0.8;
+			}
+			}
+			// Call price movement
+			if (optionType.equalsIgnoreCase("CALL")) {
+			if (priceDelta > 0) {
+				// Call price increasing
+				yield 0.8;
+			} else if (priceDelta < 0) {
+				// Call price decreasing
+				yield -1.3;
+			}
+			}
+
+			yield 0;
+		}
+
+		case "ZERO" -> {
+			
+			if (priceDelta > 0) {
+				// Call price increasing
+				yield 1;
+			} else if (priceDelta < 0) {
+				// Call price decreasing
+				yield -1;
+			}
+
+			// Keep existing value as 1 or -1
+			yield 1; // or -1 based on your requirement
+		}
+
+		default -> 0;
+		};
+	}
+
+	public OptionRsi latest(int securityId) {
+		return latestMap.get(securityId);
+	}
 }
