@@ -1,6 +1,5 @@
 package com.example.dhan_rsi_series.mapper;
 
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -61,28 +60,28 @@ public class CandleMapper {
                 .dateTime(candle.getCandleTime())
 
                 // RsiCandle fields
-                .rsi(candle.getRsi())
+                //.rsi(candle.getRsi())
                 //.vwap(0.0) // or null / calculate elsewhere
-                .deltaRsi(candle.getDeltaRsi())
+                //.deltaRsi(candle.getDeltaRsi())
                 .callFlow(candle.getCallFlow())
                 .putFlow(candle.getPutFlow())
                 .netFlow(candle.getNetFlow())
                 .highestOi(candle.getHighestOi())
                 .atp(candle.getAtp())
-                .deltaLtp(candle.getDeltaLtp())
-                .deltaDeltaLtp(candle.getDeltaDeltaLtp())
+                //.deltaLtp(candle.getDeltaLtp())
+                //.deltaDeltaLtp(candle.getDeltaDeltaLtp())
                 .buy(candle.isBuy())
                 .sell(candle.isSell())
                 .weightedOi(candle.getWeightedOi())
-                .callWeightedOi(candle.getCallWeightedOi())
-                .putWeightedOi(candle.getPutWeightedOi())
+                //.callWeightedOi(candle.getCallWeightedOi())
+                //.putWeightedOi(candle.getPutWeightedOi())
                 .gama(candle.getGamma())
-                .maxCallSecurityId(candle.getMaxCallSecurityId())
-                .maxCallOi(candle.getMaxCallOi())
-                .maxCallClose(candle.getMaxCallClose())
-                .maxPutSecurityId(candle.getMaxPutSecurityId())
-                .maxPutOi(candle.getMaxPutOi())
-                .maxPutClose(candle.getMaxPutClose())
+                //.maxCallSecurityId(candle.getMaxCallSecurityId())
+                //.maxCallOi(candle.getMaxCallOi())
+                //.maxCallClose(candle.getMaxCallClose())
+                //.maxPutSecurityId(candle.getMaxPutSecurityId())
+                //.maxPutOi(candle.getMaxPutOi())
+                //.maxPutClose(candle.getMaxPutClose())
                 //.deltaNet(candle.delta)
                 .build();
     }

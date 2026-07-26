@@ -23,6 +23,7 @@ import com.example.dhan_rsi_series.entity.OptionRsi;
 import com.example.dhan_rsi_series.entity.OptionTransaction;
 import com.example.dhan_rsi_series.enums.FlowSignal;
 import com.example.dhan_rsi_series.model.DhanOrderRequest;
+import com.example.dhan_rsi_series.model.OptionFlow;
 import com.example.dhan_rsi_series.model.Tick;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.repository.OptionTransactionRepository;
@@ -2204,7 +2205,9 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 
 	private final Map<Integer, OptionRsi> latestRsi = new ConcurrentHashMap<>();
 	private final Map<Integer, OptionRsi> lastRsi = new ConcurrentHashMap<>();
-
+	public final Map<String, OptionRsi> referenceBucket = new ConcurrentHashMap<>();
+	private final String callKey = "NIFTY" + "_" + "57344" + "_5";
+	private final String putKey = "NIFTY" + "_" + "57345" + "_5";
 	// =========================================================
 	// EXPIRY THREADS
 	// =========================================================
@@ -2434,6 +2437,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			double prevPutDpi = snap.prevPutDpi();
 			double currCallDpi = snap.currCallDpi();
 			double currPutDpi = snap.currPutDpi();
+			double currFutureDpi = snap.futureDpi();
 			double netFlow = snap.netDpi();
 			
 			log.info("📊 FLOW previous CALL={} PUT={} NET={}", prevCallDpi, prevPutDpi, netFlow);
@@ -2487,10 +2491,12 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			callSave.setCallFlow(currCallDpi);
 			callSave.setPutFlow(currPutDpi);
 			callSave.setNetFlow(netFlow);
+			callSave.setFutureFlow(currFutureDpi);
 
 			putSave.setCallFlow(currCallDpi);
 			putSave.setPutFlow(currPutDpi);
 			putSave.setNetFlow(netFlow);
+			putSave.setFutureFlow(currFutureDpi);
 
 			// ================= BUY LOGIC =================
 //			Optional<OptionRsi> maxCall = batch.stream()
@@ -2504,9 +2510,13 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			boolean putBuy = false;
 
 			// ================= SIGNAL =================
-			FlowSignal callSignal = signalService.evaluate(snap, callSave, lastRsi.getOrDefault(callSave.getSecurityId(), callSave), "CALL", callBuy, putBuy);
-			FlowSignal putSignal = signalService.evaluate(snap, putSave, lastRsi.getOrDefault(putSave.getSecurityId(), putSave), "PUT", callBuy, putBuy);
-
+			OptionFlow evaluateCall = signalService.evaluate(snap, callSave, lastRsi.getOrDefault(callSave.getSecurityId(), callSave), "CALL", callBuy, putBuy, referenceBucket);
+			FlowSignal callSignal = evaluateCall.getFlow();
+			OptionFlow evaluatePut = signalService.evaluate(snap, putSave, lastRsi.getOrDefault(putSave.getSecurityId(), putSave), "PUT", callBuy, putBuy, referenceBucket);
+			FlowSignal putSignal = evaluatePut.getFlow();
+			
+			referenceBucket.put(callKey, callSave);
+			referenceBucket.put(putKey, putSave);
 			// ================= APPLY SIGNAL TO RSI =================
 			executeCallSignal(putSignal, callSave, putSave, Optional.of(callTxn));
 			executePutSignal(callSignal, callSave, putSave, Optional.of(putTxn));

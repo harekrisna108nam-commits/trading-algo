@@ -1872,7 +1872,7 @@ public class CandleRsiService {
 			}
 			}
 
-			yield 0;
+			yield priceDelta > 0 ? 1 : -1;
 		}
 
 		case "NEGATIVE" -> {
@@ -1898,24 +1898,15 @@ public class CandleRsiService {
 			}
 			}
 
-			yield 0;
+			yield priceDelta > 0 ? 1 : -1;
 		}
 
 		case "ZERO" -> {
-			
-			if (priceDelta > 0) {
-				// Call price increasing
-				yield 1;
-			} else if (priceDelta < 0) {
-				// Call price decreasing
-				yield -1;
-			}
-
 			// Keep existing value as 1 or -1
-			yield 1; // or -1 based on your requirement
+			yield priceDelta > 0 ? 1 : -1; // or -1 based on your requirement
 		}
 
-		default -> 0;
+		default -> priceDelta > 0 ? 1 : -1;
 		};
 	}
 

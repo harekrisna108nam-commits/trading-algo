@@ -39,31 +39,40 @@ public class OptionRsi {
     private double high;
     private double low;
     private double close;
-    private double rsi;
+    //private double rsi;
     private int oi;
     private int highestOi;
     private double atp;
     private boolean buy;
     private boolean sell;
     private double dpi;     // put(delta(highestOi)*delta(atp)*close) - call(delta(highestOi)*delta(atp)*close)
-    private double deltaRsi; // previousRsi - currentRsi
+    //private double deltaRsi; // previousRsi - currentRsi
     private double callFlow;
     private double putFlow;
     private double netFlow;
-    private double deltaLtp;
-    private double deltaDeltaLtp;
+    private double futureFlow;
+    //private double deltaLtp;
+    //private double deltaDeltaLtp;
     private double weightedOi;
-    private double callWeightedOi;
-    private double putWeightedOi;
+    //private double callWeightedOi;
+    //private double putWeightedOi;
     private double gamma;
-    private int maxCallSecurityId;
-    private int maxCallOi;
-    private double maxCallClose;
-    private int maxPutSecurityId;
-    private int maxPutOi;
-    private double maxPutClose;
+    //private int maxCallSecurityId;
+    //private int maxCallOi;
+    //private double maxCallClose;
+    //private int maxPutSecurityId;
+    //private int maxPutOi;
+    //private double maxPutClose;
     private LocalDate expiry;
+    private double callBucketClose;
+    private double callBucketCallFlow;
+    private double callBucketPutFlow;
+    private double callBucketNetFlow;
     
+    private double putBucketClose;
+    private double putBucketCallFlow;
+    private double putBucketPutFlow;
+    private double putBucketNetFlow;
  // =========================================
     // Copy constructor (VERY IMPORTANT)
     // =========================================
@@ -80,7 +89,7 @@ public class OptionRsi {
         this.low = other.low;
         this.close = other.close;
 
-        this.rsi = other.rsi;
+        //this.rsi = other.rsi;
 
         this.oi = other.oi;
         this.highestOi = other.highestOi;
@@ -91,23 +100,32 @@ public class OptionRsi {
         this.sell = other.sell;
 
         this.dpi = other.dpi;
-        this.deltaRsi = other.deltaRsi;
-        this.deltaLtp = other.deltaLtp;
-        this.deltaDeltaLtp = other.deltaDeltaLtp;
+        //this.deltaRsi = other.deltaRsi;
+        //this.deltaLtp = other.deltaLtp;
+        //this.deltaDeltaLtp = other.deltaDeltaLtp;
 
         this.callFlow = other.callFlow;
         this.putFlow = other.putFlow;
         this.netFlow = other.netFlow;
         this.weightedOi = other.weightedOi;
-        this.callWeightedOi = other.callWeightedOi;
-        this.putWeightedOi = other.putWeightedOi;
+        //this.callWeightedOi = other.callWeightedOi;
+        //this.putWeightedOi = other.putWeightedOi;
         this.gamma = other.gamma;
-        this.maxCallSecurityId = other.maxCallSecurityId;
-        this.maxCallOi = other.maxCallOi;
-        this.maxCallClose = other.maxCallClose;
-        this.maxPutSecurityId = other.maxPutSecurityId;
-        this.maxPutOi = other.maxPutOi;
-        this.maxPutClose = other.maxPutClose;
+        //this.maxCallSecurityId = other.maxCallSecurityId;
+        //this.maxCallOi = other.maxCallOi;
+        //this.maxCallClose = other.maxCallClose;
+        //this.maxPutSecurityId = other.maxPutSecurityId;
+        //this.maxPutOi = other.maxPutOi;
+        //this.maxPutClose = other.maxPutClose;
+        this.futureFlow = other.futureFlow;
+        this.callBucketCallFlow = other.callBucketCallFlow;
+        this.callBucketPutFlow = other.callBucketPutFlow;
+        this.callBucketNetFlow = other.callBucketNetFlow;
+        this.putBucketCallFlow = other.putBucketCallFlow;
+        this.putBucketPutFlow = other.putBucketPutFlow;
+        this.putBucketNetFlow = other.putBucketNetFlow;
+        this.putBucketClose = other.putBucketClose;
+        this.callBucketClose = other.callBucketClose;
     }
 
 }
