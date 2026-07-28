@@ -2512,8 +2512,10 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 			// ================= SIGNAL =================
 			OptionFlow evaluateCall = signalService.evaluate(snap, callSave, lastRsi.getOrDefault(callSave.getSecurityId(), callSave), "CALL", callBuy, putBuy, referenceBucket);
 			FlowSignal callSignal = evaluateCall.getFlow();
+			callSave = evaluateCall.getOption();
 			OptionFlow evaluatePut = signalService.evaluate(snap, putSave, lastRsi.getOrDefault(putSave.getSecurityId(), putSave), "PUT", callBuy, putBuy, referenceBucket);
 			FlowSignal putSignal = evaluatePut.getFlow();
+			putSave = evaluatePut.getOption();
 			
 			referenceBucket.put(callKey, callSave);
 			referenceBucket.put(putKey, putSave);

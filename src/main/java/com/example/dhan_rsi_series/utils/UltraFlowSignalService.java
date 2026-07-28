@@ -45,6 +45,12 @@ public class UltraFlowSignalService {
 			if (firstTimeExecution.getOrDefault(callKey, true)) {
 				callBaseBucket.put(callKey, e);
 				firstTimeExecution.put(callKey, false);
+				
+				e.setCallBucketClose(e.getClose());
+				e.setCallBucketCallFlow(e.getCallFlow());
+				e.setCallBucketPutFlow(e.getPutFlow());
+				e.setCallBucketNetFlow(e.getNetFlow());
+				
 				// callBuyingBucket.put(callKey, e);
 				return OptionFlow.builder()
 						.option(e)
@@ -62,7 +68,11 @@ public class UltraFlowSignalService {
 				OptionRsi callOption = callBaseBucket.getOrDefault(callKey, e);
 				callOption.setClose(e.getClose());
 				callBaseBucket.put(callKey, callOption);
-				e.setCallBucketClose(e.getClose());
+				
+				e.setCallBucketClose(callOption.getClose());
+				e.setCallBucketCallFlow(callOption.getCallFlow());
+				e.setCallBucketPutFlow(callOption.getPutFlow());
+				e.setCallBucketNetFlow(callOption.getNetFlow());
 				
 				return OptionFlow.builder()
 						.option(e)
@@ -82,6 +92,11 @@ public class UltraFlowSignalService {
 				//update the put base bucket
 				putBaseBucket.put(putKey, refOption);
 				
+				e.setPutBucketClose(refOption.getClose());
+				e.setPutBucketCallFlow(refOption.getCallFlow());
+				e.setPutBucketPutFlow(refOption.getPutFlow());
+				e.setPutBucketNetFlow(refOption.getNetFlow());
+				
 				return OptionFlow.builder()
 						.option(e)
 						.flow(FlowSignal.BUY_PUT)
@@ -96,6 +111,12 @@ public class UltraFlowSignalService {
 			if (firstTimeExecution.getOrDefault(putKey, true)) {
 				putBaseBucket.put(putKey, e);
 				firstTimeExecution.put(putKey, false);
+				
+				e.setPutBucketClose(e.getClose());
+				e.setPutBucketCallFlow(e.getCallFlow());
+				e.setPutBucketPutFlow(e.getPutFlow());
+				e.setPutBucketNetFlow(e.getNetFlow());
+				
 				return OptionFlow.builder()
 						.option(e)
 						.flow(FlowSignal.HOLD)
@@ -110,7 +131,11 @@ public class UltraFlowSignalService {
 				OptionRsi putOption = putBaseBucket.getOrDefault(putKey, e);
 				putOption.setClose(e.getClose());
 				putBaseBucket.put(putKey, putOption);
-				e.setPutBucketClose(e.getClose());
+				
+				e.setPutBucketClose(putOption.getClose());
+				e.setPutBucketCallFlow(putOption.getCallFlow());
+				e.setPutBucketPutFlow(putOption.getPutFlow());
+				e.setPutBucketNetFlow(putOption.getNetFlow());
 				
 				return OptionFlow.builder()
 						.option(e)
@@ -129,6 +154,11 @@ public class UltraFlowSignalService {
 				
 				//update the call base bucket
 				callBaseBucket.put(callKey, refOption);
+				
+				e.setCallBucketClose(refOption.getClose());
+				e.setCallBucketCallFlow(refOption.getCallFlow());
+				e.setCallBucketPutFlow(refOption.getPutFlow());
+				e.setCallBucketNetFlow(refOption.getNetFlow());
 				
 				return OptionFlow.builder()
 						.option(e)
