@@ -2701,7 +2701,7 @@ public class DhanLiveDataHandler implements WebSocketHandler {
 		DhanOrderRequest request = DhanOrderRequest.builder().dhanClientId(clientId)
 				.correlationId(CorrelationIdGenerator.generate("NIFTY")).transactionType(type)
 				.exchangeSegment("NSE_FNO").productType("INTRADAY").orderType("MARKET").validity("DAY")
-				.securityId(String.valueOf(rsi.getSecurityId())).quantity(65).disclosedQuantity(0).price(0).triggerPrice(0)
+				.securityId(String.valueOf(rsi.getSecurityId())).quantity(65).disclosedQuantity(0).price(rsi.getClose()).triggerPrice(0)
 				.afterMarketOrder(false).build();
 
 		try {

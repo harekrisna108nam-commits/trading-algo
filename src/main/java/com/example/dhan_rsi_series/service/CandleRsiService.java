@@ -18,12 +18,15 @@ import org.springframework.stereotype.Component;
 import com.example.dhan_rsi_series.entity.DhanSubscription;
 import com.example.dhan_rsi_series.entity.OptionChain;
 import com.example.dhan_rsi_series.entity.OptionRsi;
+import com.example.dhan_rsi_series.enums.FlowSignal;
 import com.example.dhan_rsi_series.repository.DhanSubscriptionRepository;
 import com.example.dhan_rsi_series.repository.OptionChainRepository;
 import com.example.dhan_rsi_series.repository.OptionRsiRepository;
 import com.example.dhan_rsi_series.utils.CandleSnapshot;
 import com.example.dhan_rsi_series.utils.CandleState;
 import com.example.dhan_rsi_series.utils.DpiAggregatorService;
+import com.example.dhan_rsi_series.utils.FlowSignalService;
+import com.example.dhan_rsi_series.utils.UltraFlowSignalService;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -1785,7 +1788,7 @@ public class CandleRsiService {
 
 		double priceDelta = (c.close() - prevLtp);
 		
-		double sign = calculateFlowValue(DpiAggregatorService.netFlow, priceDelta, optionType);
+		double sign = calculateFlowValue(UltraFlowSignalService.marketType, priceDelta, optionType);
 				
 		//double sign = (c.close() > prevLtp) ? 1 : -1;
 		
@@ -1843,13 +1846,13 @@ public class CandleRsiService {
 		return e;
 	}
 
-	public double calculateFlowValue(double netFlow, double priceDelta, String optionType) {
+	public double calculateFlowValue(FlowSignal marketType, double priceDelta, String optionType) {
 
-		String netFlowDirection = netFlow > 0 ? "POSITIVE" : netFlow < 0 ? "NEGATIVE" : "ZERO";
+		//String prevMarket = marketType.name().equalsIgnoreCase(FlowSignal.SELL_PUT.name()) ? "POSITIVE" : marketType < 0 ? "NEGATIVE" : "ZERO";
 
-		return switch (netFlowDirection) {
+		return switch (marketType) {
 
-		case "POSITIVE" -> {
+		case FlowSignal.SELL_PUT -> {
 
 			// Put price movement
 			if (optionType.equalsIgnoreCase("PUT")) {
@@ -1875,7 +1878,7 @@ public class CandleRsiService {
 			yield priceDelta > 0 ? 1 : -1;
 		}
 
-		case "NEGATIVE" -> {
+		case FlowSignal.SELL_CALL -> {
 
 			// Put price movement
 			if (optionType.equalsIgnoreCase("PUT")) {
@@ -1901,7 +1904,7 @@ public class CandleRsiService {
 			yield priceDelta > 0 ? 1 : -1;
 		}
 
-		case "ZERO" -> {
+		case FlowSignal.HOLD -> {
 			// Keep existing value as 1 or -1
 			yield priceDelta > 0 ? 1 : -1; // or -1 based on your requirement
 		}
